@@ -21,8 +21,8 @@ import androidx.compose.material3.SnackbarHostState
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
-import androidx.compose.runtime.mutableStateListOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
@@ -38,11 +38,12 @@ import kotlinx.coroutines.withContext
 
 @Composable
 fun TodoScreen(modifier: Modifier = Modifier) {
-    val todos = remember { mutableStateListOf<Todo>() }
-    var input by remember { mutableStateOf("") }
-    var nextId by remember { mutableStateOf(1L) }
-
     val context = LocalContext.current
+    val dao = remember(context) { TodoDatabase.getInstance(context).todoDao() }
+    val todos by dao.observeAll().collectAsState(initial = emptyList())
+
+    var input by remember { mutableStateOf("") }
+
     val scope = rememberCoroutineScope()
     val snackbarHostState = remember { SnackbarHostState() }
 
@@ -69,8 +70,8 @@ fun TodoScreen(modifier: Modifier = Modifier) {
                     onClick = {
                         val trimmed = input.trim()
                         if (trimmed.isNotEmpty()) {
-                            todos.add(Todo(id = nextId++, text = trimmed))
                             input = ""
+                            scope.launch { dao.insert(Todo(text = trimmed)) }
                         }
                     },
                 ) {
@@ -82,7 +83,7 @@ fun TodoScreen(modifier: Modifier = Modifier) {
 
             Button(
                 onClick = {
-                    val snapshot = todos.toList()
+                    val snapshot = todos
                     scope.launch {
                         val result = runCatching {
                             withContext(Dispatchers.IO) {
@@ -110,12 +111,11 @@ fun TodoScreen(modifier: Modifier = Modifier) {
                     TodoRow(
                         todo = todo,
                         onToggle = {
-                            val index = todos.indexOfFirst { it.id == todo.id }
-                            if (index != -1) {
-                                todos[index] = todos[index].copy(isDone = !todos[index].isDone)
-                            }
+                            scope.launch { dao.update(todo.copy(isDone = !todo.isDone)) }
                         },
-                        onDelete = { todos.removeAll { it.id == todo.id } },
+                        onDelete = {
+                            scope.launch { dao.delete(todo) }
+                        },
                     )
                 }
             }
