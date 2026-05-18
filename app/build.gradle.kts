@@ -24,11 +24,11 @@ val hasReleaseSigning = listOf(
 ).all { it != null }
 
 android {
-    namespace = "com.mohanic.todo"
+    namespace = "com.mohannic.taskarma"
     compileSdk = 35
 
     defaultConfig {
-        applicationId = "com.mohanic.todo"
+        applicationId = "com.mohannic.taskarma"
         minSdk = 24
         targetSdk = 35
         versionCode = 1
