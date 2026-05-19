@@ -113,10 +113,9 @@ fun TodoScreen(modifier: Modifier = Modifier) {
                         onToggle = {
                             scope.launch { dao.update(todo.copy(isDone = !todo.isDone)) }
                         },
-                        onDelete = {
-                            scope.launch { dao.delete(todo) }
-                        },
-                    )
+                    ) {
+                        scope.launch { dao.delete(todo) }
+                    }
                 }
             }
         }

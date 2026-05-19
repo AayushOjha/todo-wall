@@ -7,6 +7,8 @@ import android.graphics.Canvas
 import android.graphics.Color
 import android.graphics.Paint
 import android.graphics.Typeface
+import androidx.core.graphics.createBitmap
+import androidx.core.graphics.toColorInt
 
 private const val FALLBACK_WIDTH = 1080
 private const val FALLBACK_HEIGHT = 1920
@@ -21,9 +23,9 @@ fun renderTodosToBitmap(context: Context, todos: List<Todo>): Bitmap {
     val width = wallpaperManager.desiredMinimumWidth.takeIf { it > 0 } ?: FALLBACK_WIDTH
     val height = wallpaperManager.desiredMinimumHeight.takeIf { it > 0 } ?: FALLBACK_HEIGHT
 
-    val bitmap = Bitmap.createBitmap(width, height, Bitmap.Config.ARGB_8888)
+    val bitmap = createBitmap(width, height, Bitmap.Config.ARGB_8888)
     val canvas = Canvas(bitmap)
-    canvas.drawColor(Color.parseColor("#101418"))
+    canvas.drawColor("#101418".toColorInt())
 
     val titlePaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
         color = Color.WHITE
@@ -35,7 +37,7 @@ fun renderTodosToBitmap(context: Context, todos: List<Todo>): Bitmap {
         textSize = ITEM_SIZE
     }
     val donePaint = Paint(Paint.ANTI_ALIAS_FLAG or Paint.STRIKE_THRU_TEXT_FLAG).apply {
-        color = Color.parseColor("#888888")
+        color = "#888888".toColorInt()
         textSize = ITEM_SIZE
     }
 
