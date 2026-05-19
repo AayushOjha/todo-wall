@@ -2,10 +2,9 @@ package com.mohannic.taskarma.ui.theme
 
 import androidx.compose.ui.graphics.Color
 
-val Purple80 = Color(0xFFD0BCFF)
-val PurpleGrey80 = Color(0xFFCCC2DC)
-val Pink80 = Color(0xFFEFB8C8)
-
-val Purple40 = Color(0xFF6650a4)
-val PurpleGrey40 = Color(0xFF625b71)
-val Pink40 = Color(0xFF7D5260)
+val ElectricBlue = Color(0xFF3D8BFF)
+val DeepSlate = Color(0xFF101418)
+val DarkGrey = Color(0xFF1E2329)
+val SoftMint = Color(0xFFA7F3D0)
+val Rose = Color(0xFFFF5F5F)
+val Steel = Color(0xFF94A3B8)
