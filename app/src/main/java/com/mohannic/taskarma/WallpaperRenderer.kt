@@ -12,11 +12,11 @@ import androidx.core.graphics.toColorInt
 
 private const val FALLBACK_WIDTH = 1080
 private const val FALLBACK_HEIGHT = 1920
-private const val HORIZONTAL_PADDING = 100f
-private const val TOP_PADDING = 300f
-private const val TITLE_SIZE = 110f
-private const val ITEM_SIZE = 54f
-private const val LINE_SPACING = 100f
+private const val HORIZONTAL_PADDING = 120f
+private const val TOP_PADDING = 400f
+private const val TITLE_SIZE = 80f
+private const val ITEM_SIZE = 50f
+private const val LINE_SPACING = 110f
 
 fun renderTodosToBitmap(context: Context, todos: List<Todo>): Bitmap {
     val wallpaperManager = WallpaperManager.getInstance(context)
@@ -26,36 +26,47 @@ fun renderTodosToBitmap(context: Context, todos: List<Todo>): Bitmap {
     val bitmap = createBitmap(width, height, Bitmap.Config.ARGB_8888)
     val canvas = Canvas(bitmap)
     
-    // Brand background: Deep Slate
-    canvas.drawColor("#101418".toColorInt())
+    // Clean Dark Background (Google Dark Style)
+    canvas.drawColor("#121212".toColorInt())
 
     val titlePaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
-        color = "#3D8BFF".toColorInt() // Electric Blue
+        color = "#1A73E8".toColorInt() // Google Blue
         textSize = TITLE_SIZE
-        typeface = Typeface.create(Typeface.DEFAULT, Typeface.BOLD)
+        typeface = Typeface.create("sans-serif-medium", Typeface.NORMAL)
     }
     val itemPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
         color = Color.WHITE
         textSize = ITEM_SIZE
-        typeface = Typeface.create(Typeface.DEFAULT, Typeface.NORMAL)
+        typeface = Typeface.create("sans-serif", Typeface.NORMAL)
     }
     val donePaint = Paint(Paint.ANTI_ALIAS_FLAG or Paint.STRIKE_THRU_TEXT_FLAG).apply {
-        color = "#94A3B8".toColorInt() // Steel
+        color = "#80FFFFFF".toColorInt() // Semi-transparent white
         textSize = ITEM_SIZE
+    }
+    val dividerPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
+        color = "#20FFFFFF".toColorInt()
+        strokeWidth = 2f
     }
 
     var y = TOP_PADDING
     canvas.drawText("TASKS", HORIZONTAL_PADDING, y, titlePaint)
-    y += LINE_SPACING * 1.8f
+    y += LINE_SPACING * 0.8f
+    canvas.drawLine(HORIZONTAL_PADDING, y, width - HORIZONTAL_PADDING, y, dividerPaint)
+    y += LINE_SPACING * 1.2f
 
     if (todos.isEmpty()) {
-        canvas.drawText("All clear for now.", HORIZONTAL_PADDING, y, itemPaint)
+        canvas.drawText("No pending tasks", HORIZONTAL_PADDING, y, itemPaint)
     } else {
-        todos.forEach { todo ->
-            val marker = if (todo.isDone) "✓" else "○"
+        // Only show first 10-12 tasks to avoid overflow
+        todos.take(12).forEach { todo ->
             val paint = if (todo.isDone) donePaint else itemPaint
-            canvas.drawText("$marker   ${todo.text}", HORIZONTAL_PADDING, y, paint)
+            val bullet = if (todo.isDone) "✓ " else "○ "
+            canvas.drawText("$bullet ${todo.text}", HORIZONTAL_PADDING, y, paint)
             y += LINE_SPACING
+        }
+        
+        if (todos.size > 12) {
+            canvas.drawText("... and ${todos.size - 12} more", HORIZONTAL_PADDING, y, donePaint)
         }
     }
 
