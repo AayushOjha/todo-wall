@@ -29,20 +29,29 @@ import kotlinx.coroutines.withContext
 fun TodoScreen(modifier: Modifier = Modifier) {
     val context = LocalContext.current
     val dao = remember(context) { TodoDatabase.getInstance(context).todoDao() }
-    val todos by dao.observeAll().collectAsState(initial = emptyList())
+    val todosState by dao.observeAll().collectAsState(initial = null)
+    val todos = todosState ?: emptyList()
 
     val scope = rememberCoroutineScope()
     var showAddSheet by remember { mutableStateOf(false) }
 
     // Automatic Wallpaper Update
-    LaunchedEffect(todos) {
+    LaunchedEffect(todosState) {
+        val currentTodos = todosState ?: return@LaunchedEffect
         withContext(Dispatchers.IO) {
-            val bitmap = renderTodosToBitmap(context, todos)
-            val wallpaperManager = WallpaperManager.getInstance(context)
-            try {
-                wallpaperManager.setBitmap(bitmap)
-            } catch (e: Exception) {
-                e.printStackTrace()
+            val sharedPrefs = context.getSharedPreferences("taskarma_prefs", android.content.Context.MODE_PRIVATE)
+            val currentHash = currentTodos.hashCode()
+            val lastHash = sharedPrefs.getInt("last_wallpaper_hash", 0)
+
+            if (currentHash != lastHash) {
+                val bitmap = renderTodosToBitmap(context, currentTodos)
+                val wallpaperManager = WallpaperManager.getInstance(context)
+                try {
+                    wallpaperManager.setBitmap(bitmap)
+                    sharedPrefs.edit().putInt("last_wallpaper_hash", currentHash).apply()
+                } catch (e: Exception) {
+                    e.printStackTrace()
+                }
             }
         }
     }
