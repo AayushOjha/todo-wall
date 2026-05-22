@@ -7,6 +7,10 @@ import android.graphics.Canvas
 import android.graphics.Color
 import android.graphics.Paint
 import android.graphics.Typeface
+import android.text.Layout
+import android.text.StaticLayout
+import android.text.TextPaint
+import android.text.TextUtils
 import androidx.core.graphics.createBitmap
 import androidx.core.graphics.toColorInt
 
@@ -17,11 +21,12 @@ private const val TOP_PADDING = 400f
 private const val TITLE_SIZE = 80f
 private const val ITEM_SIZE = 50f
 private const val LINE_SPACING = 110f
+private const val BULLET_SPACING = 80f
 
 fun renderTodosToBitmap(context: Context, todos: List<Todo>): Bitmap {
-    val wallpaperManager = WallpaperManager.getInstance(context)
-    val width = wallpaperManager.desiredMinimumWidth.takeIf { it > 0 } ?: FALLBACK_WIDTH
-    val height = wallpaperManager.desiredMinimumHeight.takeIf { it > 0 } ?: FALLBACK_HEIGHT
+    val displayMetrics = context.resources.displayMetrics
+    val width = displayMetrics.widthPixels.takeIf { it > 0 } ?: FALLBACK_WIDTH
+    val height = displayMetrics.heightPixels.takeIf { it > 0 } ?: FALLBACK_HEIGHT
 
     val bitmap = createBitmap(width, height, Bitmap.Config.ARGB_8888)
     val canvas = Canvas(bitmap)
@@ -34,15 +39,19 @@ fun renderTodosToBitmap(context: Context, todos: List<Todo>): Bitmap {
         textSize = TITLE_SIZE
         typeface = Typeface.create("sans-serif-medium", Typeface.NORMAL)
     }
-    val itemPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
+    
+    val itemPaint = TextPaint(Paint.ANTI_ALIAS_FLAG).apply {
         color = Color.WHITE
         textSize = ITEM_SIZE
         typeface = Typeface.create("sans-serif", Typeface.NORMAL)
     }
-    val donePaint = Paint(Paint.ANTI_ALIAS_FLAG or Paint.STRIKE_THRU_TEXT_FLAG).apply {
+    
+    val donePaint = TextPaint(Paint.ANTI_ALIAS_FLAG or Paint.STRIKE_THRU_TEXT_FLAG).apply {
         color = "#80FFFFFF".toColorInt() // Semi-transparent white
         textSize = ITEM_SIZE
+        typeface = Typeface.create("sans-serif", Typeface.NORMAL)
     }
+    
     val dividerPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
         color = "#20FFFFFF".toColorInt()
         strokeWidth = 2f
@@ -54,19 +63,51 @@ fun renderTodosToBitmap(context: Context, todos: List<Todo>): Bitmap {
     canvas.drawLine(HORIZONTAL_PADDING, y, width - HORIZONTAL_PADDING, y, dividerPaint)
     y += LINE_SPACING * 1.2f
 
+    val availableWidth = width - 2 * HORIZONTAL_PADDING - BULLET_SPACING
+    val maxRenderHeight = height - 250f // Safe bottom margin above dock/navigation bar
+
     if (todos.isEmpty()) {
         canvas.drawText("No pending tasks", HORIZONTAL_PADDING, y, itemPaint)
     } else {
-        // Only show first 10-12 tasks to avoid overflow
-        todos.take(12).forEach { todo ->
+        for (i in todos.indices) {
+            val todo = todos[i]
             val paint = if (todo.isDone) donePaint else itemPaint
             val bullet = if (todo.isDone) "✓ " else "○ "
-            canvas.drawText("$bullet ${todo.text}", HORIZONTAL_PADDING, y, paint)
-            y += LINE_SPACING
-        }
-        
-        if (todos.size > 12) {
-            canvas.drawText("... and ${todos.size - 12} more", HORIZONTAL_PADDING, y, donePaint)
+            
+            // Build StaticLayout for wrapped task text
+            val staticLayout = StaticLayout.Builder.obtain(todo.text, 0, todo.text.length, paint, availableWidth.toInt())
+                .setAlignment(Layout.Alignment.ALIGN_NORMAL)
+                .setMaxLines(2)
+                .setEllipsize(TextUtils.TruncateAt.END)
+                .setLineSpacing(0f, 1.1f)
+                .setIncludePad(false)
+                .build()
+
+            val lineCount = staticLayout.lineCount
+            val itemHeight = if (lineCount > 1) {
+                staticLayout.getLineBaseline(lineCount - 1) - staticLayout.getLineBaseline(0) + LINE_SPACING
+            } else {
+                LINE_SPACING
+            }
+
+            // Check if this item and potential overflow indicator would exceed the safe render height
+            val remainingTasks = todos.size - i
+            val overflowIndicatorHeight = if (remainingTasks > 1) LINE_SPACING else 0f
+            if (y + itemHeight + overflowIndicatorHeight > maxRenderHeight) {
+                canvas.drawText("... and $remainingTasks more", HORIZONTAL_PADDING, y, donePaint)
+                break
+            }
+
+            // Draw bullet
+            canvas.drawText(bullet, HORIZONTAL_PADDING, y, paint)
+
+            // Draw text layout aligned to the bullet's baseline
+            canvas.save()
+            canvas.translate(HORIZONTAL_PADDING + BULLET_SPACING, y - staticLayout.getLineBaseline(0))
+            staticLayout.draw(canvas)
+            canvas.restore()
+
+            y += itemHeight
         }
     }
 

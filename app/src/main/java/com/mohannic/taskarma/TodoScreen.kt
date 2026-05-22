@@ -47,6 +47,7 @@ fun TodoScreen(modifier: Modifier = Modifier) {
                 val bitmap = renderTodosToBitmap(context, currentTodos)
                 val wallpaperManager = WallpaperManager.getInstance(context)
                 try {
+                    wallpaperManager.suggestDesiredDimensions(bitmap.width, bitmap.height)
                     wallpaperManager.setBitmap(bitmap)
                     sharedPrefs.edit().putInt("last_wallpaper_hash", currentHash).apply()
                 } catch (e: Exception) {
