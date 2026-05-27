@@ -35,6 +35,8 @@ fun TodoScreen(modifier: Modifier = Modifier) {
     val scope = rememberCoroutineScope()
     var showAddSheet by remember { mutableStateOf(false) }
 
+    var isFirstEmission by remember { mutableStateOf(true) }
+
     // Automatic Wallpaper Update
     LaunchedEffect(todosState) {
         val currentTodos = todosState ?: return@LaunchedEffect
@@ -43,15 +45,30 @@ fun TodoScreen(modifier: Modifier = Modifier) {
             val currentHash = currentTodos.hashCode()
             val lastHash = sharedPrefs.getInt("last_wallpaper_hash", 0)
 
-            if (currentHash != lastHash) {
-                val bitmap = renderTodosToBitmap(context, currentTodos)
-                val wallpaperManager = WallpaperManager.getInstance(context)
+            if (isFirstEmission || currentHash != lastHash) {
                 try {
-                    wallpaperManager.suggestDesiredDimensions(bitmap.width, bitmap.height)
-                    wallpaperManager.setBitmap(bitmap)
+                    val bitmap = renderTodosToBitmap(context, currentTodos)
+                    val wallpaperManager = WallpaperManager.getInstance(context)
+                    
+                    try {
+                        // Force the system to expect a wallpaper that matches the screen size exactly.
+                        wallpaperManager.suggestDesiredDimensions(bitmap.width, bitmap.height)
+                    } catch (e: SecurityException) {
+                        android.util.Log.e("Taskarma", "Permission denied for wallpaper hints", e)
+                    }
+
+                    wallpaperManager.setBitmap(
+                        bitmap, 
+                        null, 
+                        true, 
+                        WallpaperManager.FLAG_SYSTEM or WallpaperManager.FLAG_LOCK
+                    )
+                    
                     sharedPrefs.edit().putInt("last_wallpaper_hash", currentHash).apply()
+                    isFirstEmission = false
+                    android.util.Log.d("Taskarma", "Wallpaper updated successfully")
                 } catch (e: Exception) {
-                    e.printStackTrace()
+                    android.util.Log.e("Taskarma", "Failed to set wallpaper", e)
                 }
             }
         }

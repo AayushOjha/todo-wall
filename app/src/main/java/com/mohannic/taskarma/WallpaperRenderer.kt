@@ -16,15 +16,26 @@ import androidx.core.graphics.toColorInt
 
 private const val FALLBACK_WIDTH = 1080
 private const val FALLBACK_HEIGHT = 1920
-private const val HORIZONTAL_PADDING = 120f
-private const val TOP_PADDING = 400f
-private const val TITLE_SIZE = 80f
-private const val ITEM_SIZE = 50f
-private const val LINE_SPACING = 110f
-private const val BULLET_SPACING = 80f
+private const val HORIZONTAL_PADDING_DP = 40f
+private const val TOP_PADDING_DP = 150f
+private const val TITLE_SIZE_SP = 32f
+private const val ITEM_SIZE_SP = 20f
+private const val LINE_SPACING_DP = 44f
+private const val BULLET_SPACING_DP = 30f
 
 fun renderTodosToBitmap(context: Context, todos: List<Todo>): Bitmap {
     val displayMetrics = context.resources.displayMetrics
+    val density = displayMetrics.density
+    
+    // Scale dimensions based on density
+    val horizontalPadding = HORIZONTAL_PADDING_DP * density
+    val topPadding = TOP_PADDING_DP * density
+    val titleSize = TITLE_SIZE_SP * density
+    val itemSize = ITEM_SIZE_SP * density
+    val lineSpacing = LINE_SPACING_DP * density
+    val bulletSpacing = BULLET_SPACING_DP * density
+
+    // Use exact screen dimensions to prevent scrolling on multi-page home screens
     val width = displayMetrics.widthPixels.takeIf { it > 0 } ?: FALLBACK_WIDTH
     val height = displayMetrics.heightPixels.takeIf { it > 0 } ?: FALLBACK_HEIGHT
 
@@ -36,38 +47,38 @@ fun renderTodosToBitmap(context: Context, todos: List<Todo>): Bitmap {
 
     val titlePaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
         color = "#1A73E8".toColorInt() // Google Blue
-        textSize = TITLE_SIZE
+        textSize = titleSize
         typeface = Typeface.create("sans-serif-medium", Typeface.NORMAL)
     }
     
     val itemPaint = TextPaint(Paint.ANTI_ALIAS_FLAG).apply {
         color = Color.WHITE
-        textSize = ITEM_SIZE
+        textSize = itemSize
         typeface = Typeface.create("sans-serif", Typeface.NORMAL)
     }
     
     val donePaint = TextPaint(Paint.ANTI_ALIAS_FLAG or Paint.STRIKE_THRU_TEXT_FLAG).apply {
         color = "#80FFFFFF".toColorInt() // Semi-transparent white
-        textSize = ITEM_SIZE
+        textSize = itemSize
         typeface = Typeface.create("sans-serif", Typeface.NORMAL)
     }
     
     val dividerPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
         color = "#20FFFFFF".toColorInt()
-        strokeWidth = 2f
+        strokeWidth = 2f * density
     }
 
-    var y = TOP_PADDING
-    canvas.drawText("TASKS", HORIZONTAL_PADDING, y, titlePaint)
-    y += LINE_SPACING * 0.8f
-    canvas.drawLine(HORIZONTAL_PADDING, y, width - HORIZONTAL_PADDING, y, dividerPaint)
-    y += LINE_SPACING * 1.2f
+    var y = topPadding
+    canvas.drawText("TASKS", horizontalPadding, y, titlePaint)
+    y += lineSpacing * 0.8f
+    canvas.drawLine(horizontalPadding, y, width - horizontalPadding, y, dividerPaint)
+    y += lineSpacing * 1.2f
 
-    val availableWidth = width - 2 * HORIZONTAL_PADDING - BULLET_SPACING
-    val maxRenderHeight = height - 250f // Safe bottom margin above dock/navigation bar
+    val availableWidth = (width - 2 * horizontalPadding - bulletSpacing).coerceAtLeast(100f)
+    val maxRenderHeight = height - (100f * density) // Safe bottom margin
 
     if (todos.isEmpty()) {
-        canvas.drawText("No pending tasks", HORIZONTAL_PADDING, y, itemPaint)
+        canvas.drawText("No pending tasks", horizontalPadding, y, itemPaint)
     } else {
         for (i in todos.indices) {
             val todo = todos[i]
@@ -85,25 +96,25 @@ fun renderTodosToBitmap(context: Context, todos: List<Todo>): Bitmap {
 
             val lineCount = staticLayout.lineCount
             val itemHeight = if (lineCount > 1) {
-                staticLayout.getLineBaseline(lineCount - 1) - staticLayout.getLineBaseline(0) + LINE_SPACING
+                staticLayout.getLineBaseline(lineCount - 1) - staticLayout.getLineBaseline(0) + lineSpacing
             } else {
-                LINE_SPACING
+                lineSpacing
             }
 
             // Check if this item and potential overflow indicator would exceed the safe render height
             val remainingTasks = todos.size - i
-            val overflowIndicatorHeight = if (remainingTasks > 1) LINE_SPACING else 0f
+            val overflowIndicatorHeight = if (remainingTasks > 1) lineSpacing else 0f
             if (y + itemHeight + overflowIndicatorHeight > maxRenderHeight) {
-                canvas.drawText("... and $remainingTasks more", HORIZONTAL_PADDING, y, donePaint)
+                canvas.drawText("... and $remainingTasks more", horizontalPadding, y, donePaint)
                 break
             }
 
             // Draw bullet
-            canvas.drawText(bullet, HORIZONTAL_PADDING, y, paint)
+            canvas.drawText(bullet, horizontalPadding, y, paint)
 
             // Draw text layout aligned to the bullet's baseline
             canvas.save()
-            canvas.translate(HORIZONTAL_PADDING + BULLET_SPACING, y - staticLayout.getLineBaseline(0))
+            canvas.translate(horizontalPadding + bulletSpacing, y - staticLayout.getLineBaseline(0))
             staticLayout.draw(canvas)
             canvas.restore()
 
