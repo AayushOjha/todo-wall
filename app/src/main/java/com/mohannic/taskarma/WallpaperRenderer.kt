@@ -6,7 +6,6 @@ import android.graphics.Canvas
 import android.graphics.Color
 import android.graphics.LinearGradient
 import android.graphics.Paint
-import android.graphics.RectF
 import android.graphics.Shader
 import android.graphics.Typeface
 import android.text.Layout
@@ -16,219 +15,188 @@ import android.text.TextUtils
 import androidx.core.graphics.createBitmap
 import androidx.core.graphics.toColorInt
 
-private const val FALLBACK_WIDTH         = 1080
-private const val FALLBACK_HEIGHT        = 1920
-private const val HORIZONTAL_PADDING_DP  = 48f
-private const val TOP_PADDING_DP         = 160f
-private const val TITLE_SIZE_SP          = 28f
-private const val SUBTITLE_SIZE_SP       = 14f
-private const val ITEM_SIZE_SP           = 19f
-private const val LINE_SPACING_DP        = 52f
-private const val BULLET_SPACING_DP      = 32f
-private const val CARD_CORNER_DP         = 18f
-private const val CARD_H_PADDING_DP      = 18f
-private const val CARD_V_PADDING_DP      = 14f
+// ── Layout constants (all in dp, scaled by density at runtime) ──────────────
+private const val FALLBACK_WIDTH       = 1080
+private const val FALLBACK_HEIGHT      = 1920
+
+private const val TOP_PAD_DP          = 90f   // reduced — wallpaper sits behind status bar
+private const val H_PAD_DP            = 52f
+private const val APP_LABEL_SP        = 11f   // tiny "TASKARMA" eyebrow
+private const val HEADER_SP           = 22f   // compact header "My Tasks"
+private const val ITEM_SP             = 17f   // todo text
+private const val ROW_GAP_DP          = 8f    // gap between rows
+private const val SECTION_GAP_DP      = 18f   // gap before done section
+private const val BULLET_X_DP         = 16f   // bullet offset from H_PAD
+private const val TEXT_OFFSET_DP      = 26f   // text start after bullet
+private const val DIVIDER_GAP_DP      = 10f   // space after header divider
+private const val BOTTOM_SAFE_DP      = 90f   // keep clear of gesture area
 
 fun renderTodosToBitmap(context: Context, todos: List<Todo>, isDark: Boolean = true): Bitmap {
     val dm      = context.resources.displayMetrics
     val density = dm.density
 
-    val hPad        = HORIZONTAL_PADDING_DP * density
-    val topPad      = TOP_PADDING_DP        * density
-    val titleSize   = TITLE_SIZE_SP         * density
-    val subtitleSize= SUBTITLE_SIZE_SP      * density
-    val itemSize    = ITEM_SIZE_SP          * density
-    val lineSpacing = LINE_SPACING_DP       * density
-    val bulletSpacing= BULLET_SPACING_DP   * density
-    val cardCorner  = CARD_CORNER_DP        * density
-    val cardHPad    = CARD_H_PADDING_DP     * density
-    val cardVPad    = CARD_V_PADDING_DP     * density
+    val width   = dm.widthPixels.takeIf  { it > 0 } ?: FALLBACK_WIDTH
+    val height  = dm.heightPixels.takeIf { it > 0 } ?: FALLBACK_HEIGHT
 
-    val width  = dm.widthPixels.takeIf  { it > 0 } ?: FALLBACK_WIDTH
-    val height = dm.heightPixels.takeIf { it > 0 } ?: FALLBACK_HEIGHT
+    val topPad      = TOP_PAD_DP      * density
+    val hPad        = H_PAD_DP        * density
+    val appLabelSp  = APP_LABEL_SP    * density
+    val headerSp    = HEADER_SP       * density
+    val itemSp      = ITEM_SP         * density
+    val rowGap      = ROW_GAP_DP      * density
+    val sectionGap  = SECTION_GAP_DP  * density
+    val bulletX     = hPad - BULLET_X_DP * density
+    val textOffset  = TEXT_OFFSET_DP  * density
+    val dividerGap  = DIVIDER_GAP_DP  * density
+    val bottomSafe  = height - BOTTOM_SAFE_DP * density
 
     val bitmap = createBitmap(width, height, Bitmap.Config.ARGB_8888)
     val canvas = Canvas(bitmap)
 
-    // ── Background ───────────────────────────────────────────────────────────
-    if (isDark) {
-        // Deep navy gradient
-        val bgGrad = LinearGradient(
-            0f, 0f, 0f, height.toFloat(),
-            intArrayOf(
-                "#0D0F14".toColorInt(),
-                "#0D0F14".toColorInt(),
-                "#161924".toColorInt()
-            ),
-            floatArrayOf(0f, 0.6f, 1f),
-            Shader.TileMode.CLAMP
-        )
-        canvas.drawPaint(Paint().apply { shader = bgGrad })
+    // ── Background ────────────────────────────────────────────────────────────
+    val bgColors = if (isDark) {
+        intArrayOf("#0D0F14".toColorInt(), "#0D0F14".toColorInt(), "#13172B".toColorInt())
     } else {
-        // Soft light gradient
-        val bgGrad = LinearGradient(
+        intArrayOf("#F5F6FF".toColorInt(), "#F0F1FF".toColorInt(), "#E8E6FF".toColorInt())
+    }
+    canvas.drawPaint(Paint().apply {
+        shader = LinearGradient(
             0f, 0f, 0f, height.toFloat(),
-            intArrayOf(
-                "#F5F6FF".toColorInt(),
-                "#EEEEFF".toColorInt(),
-                "#E8E6FF".toColorInt()
-            ),
-            floatArrayOf(0f, 0.5f, 1f),
-            Shader.TileMode.CLAMP
+            bgColors, floatArrayOf(0f, 0.55f, 1f), Shader.TileMode.CLAMP
         )
-        canvas.drawPaint(Paint().apply { shader = bgGrad })
-    }
-
-    // ── Decorative accent blob (top-right) ───────────────────────────────────
-    val blobPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
-        val blobColor = if (isDark) Color.argb(40, 108, 99, 255)
-                        else        Color.argb(30, 108, 99, 255)
-        shader = android.graphics.RadialGradient(
-            width * 0.85f, height * 0.08f,
-            width * 0.45f,
-            intArrayOf(blobColor, Color.TRANSPARENT),
-            floatArrayOf(0f, 1f),
-            Shader.TileMode.CLAMP
-        )
-    }
-    canvas.drawCircle(width * 0.85f, height * 0.08f, width * 0.45f, blobPaint)
+    })
 
     // ── Colour tokens ─────────────────────────────────────────────────────────
-    val colorPrimary   = if (isDark) "#8B84FF".toColorInt() else "#6C63FF".toColorInt()
-    val colorOnBg      = if (isDark) "#F0F2FF".toColorInt() else "#0D0F14".toColorInt()
-    val colorMuted     = if (isDark) "#8892B0".toColorInt() else "#64678A".toColorInt()
-    val colorCard      = if (isDark) Color.argb(200, 30, 34, 51)
-                         else        Color.argb(220, 255, 255, 255)
-    val colorCardDone  = if (isDark) Color.argb(100, 22, 25, 36)
-                         else        Color.argb(140, 238, 238, 248)
-    val colorTextDone  = if (isDark) Color.argb(120, 240, 242, 255)
-                         else        Color.argb(130, 13, 15, 20)
-    val colorDivider   = if (isDark) Color.argb(30, 255, 255, 255)
+    val colorPrimary   = if (isDark) "#8B84FF".toColorInt() else "#5A52D5".toColorInt()
+    val colorOnBg      = if (isDark) "#E8EAFF".toColorInt() else "#0D0F14".toColorInt()
+    val colorMuted     = if (isDark) "#6B7399".toColorInt() else "#7577A0".toColorInt()
+    val colorDone      = if (isDark) Color.argb(100, 180, 185, 220)
+                         else        Color.argb(120, 80, 85, 130)
+    val colorDivider   = if (isDark) Color.argb(35, 255, 255, 255)
                          else        Color.argb(40, 0, 0, 0)
-    val colorCheck     = if (isDark) "#00D9A3".toColorInt() else "#00A37A".toColorInt()
+    val colorBullet    = colorPrimary
+    val colorDoneMark  = colorMuted
 
     // ── Paints ────────────────────────────────────────────────────────────────
-    val titlePaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
-        color    = colorPrimary
-        textSize = titleSize
+    val appLabelPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
+        color       = colorMuted
+        textSize    = appLabelSp
+        typeface    = Typeface.create("sans-serif-medium", Typeface.NORMAL)
+        letterSpacing = 0.18f
+    }
+    val headerPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
+        color    = colorOnBg
+        textSize = headerSp
         typeface = Typeface.create("sans-serif-medium", Typeface.NORMAL)
     }
-
-    val subtitlePaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
-        color    = colorMuted
-        textSize = subtitleSize
-        typeface = Typeface.create("sans-serif", Typeface.NORMAL)
-        letterSpacing = 0.08f
-    }
-
-    val itemPaint = TextPaint(Paint.ANTI_ALIAS_FLAG).apply {
-        color    = colorOnBg
-        textSize = itemSize
-        typeface = Typeface.create("sans-serif", Typeface.NORMAL)
-    }
-
-    val donePaint = TextPaint(Paint.ANTI_ALIAS_FLAG or Paint.STRIKE_THRU_TEXT_FLAG).apply {
-        color    = colorTextDone
-        textSize = itemSize
-        typeface = Typeface.create("sans-serif", Typeface.NORMAL)
-    }
-
-    val cardPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
-        style     = Paint.Style.FILL
-        color     = colorCard
-    }
-
-    val cardDonePaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
-        style = Paint.Style.FILL
-        color = colorCardDone
-    }
-
     val dividerPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
         color       = colorDivider
-        strokeWidth = 1.5f * density
+        strokeWidth = 1f * density
+        style       = Paint.Style.STROKE
     }
-
+    val itemPaint = TextPaint(Paint.ANTI_ALIAS_FLAG).apply {
+        color    = colorOnBg
+        textSize = itemSp
+        typeface = Typeface.create("sans-serif", Typeface.NORMAL)
+    }
+    val donePaint = TextPaint(Paint.ANTI_ALIAS_FLAG or Paint.STRIKE_THRU_TEXT_FLAG).apply {
+        color    = colorDone
+        textSize = itemSp
+        typeface = Typeface.create("sans-serif", Typeface.NORMAL)
+    }
     val bulletPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
-        color = colorMuted
-        textSize = itemSize
+        color    = colorBullet
+        textSize = itemSp * 0.9f
+        typeface = Typeface.create("sans-serif", Typeface.BOLD)
+    }
+    val doneBulletPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
+        color    = colorDoneMark
+        textSize = itemSp * 0.85f
         typeface = Typeface.create("sans-serif", Typeface.NORMAL)
     }
-
-    val checkPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
-        color = colorCheck
-        textSize = itemSize
-        typeface = Typeface.create("sans-serif", Typeface.NORMAL)
+    val overflowPaint = TextPaint(Paint.ANTI_ALIAS_FLAG).apply {
+        color    = colorMuted
+        textSize = itemSp * 0.85f
+        typeface = Typeface.create("sans-serif", Typeface.ITALIC)
     }
 
     // ── Header ────────────────────────────────────────────────────────────────
     var y = topPad
-    canvas.drawText("TASKARMA", hPad, y, subtitlePaint)
-    y += titleSize * 1.1f
-    canvas.drawText("My Tasks", hPad, y, titlePaint)
-    y += lineSpacing * 0.4f
-    canvas.drawLine(hPad, y, width - hPad, y, dividerPaint)
-    y += lineSpacing * 1.1f
 
-    // ── Items ────────────────────────────────────────────────────────────────
-    val cardWidth      = width - 2 * hPad
-    val textStartX     = hPad + cardHPad + bulletSpacing
-    val textAvailWidth = (cardWidth - cardHPad * 2 - bulletSpacing - cardHPad).toInt()
-    val maxRenderY     = height - 120f * density
+    // "TASKARMA" eyebrow
+    canvas.drawText("TASKARMA", hPad, y, appLabelPaint)
+    y += appLabelSp * 1.6f
+
+    // "My Tasks" title
+    canvas.drawText("My Tasks", hPad, y, headerPaint)
+    y += headerSp * 0.55f
+
+    // divider line
+    canvas.drawLine(hPad, y, width - hPad, y, dividerPaint)
+    y += dividerGap + itemSp * 0.8f   // compact gap after divider
+
+    // ── Items ─────────────────────────────────────────────────────────────────
+    val textWidth    = (width - hPad - textOffset - hPad * 0.4f).toInt().coerceAtLeast(100)
+    val pending      = todos.filter { !it.isDone }
+    val done         = todos.filter { it.isDone }
+
+    fun drawItem(todo: Todo, isDone: Boolean): Boolean {
+        val paint  = if (isDone) donePaint else itemPaint
+        val bPaint = if (isDone) doneBulletPaint else bulletPaint
+        val bullet = if (isDone) "✓" else "·"
+
+        val layout = StaticLayout.Builder
+            .obtain(todo.text, 0, todo.text.length, paint, textWidth)
+            .setAlignment(Layout.Alignment.ALIGN_NORMAL)
+            .setMaxLines(2)
+            .setEllipsize(TextUtils.TruncateAt.END)
+            .setLineSpacing(0f, 1.1f)
+            .setIncludePad(false)
+            .build()
+
+        val blockHeight = layout.height.toFloat() + rowGap
+
+        if (y + blockHeight > bottomSafe) return false  // no space, stop
+
+        // bullet baseline aligns with first text baseline
+        val baseline0 = y + layout.getLineBaseline(0)
+        canvas.drawText(bullet, bulletX, baseline0, bPaint)
+
+        canvas.save()
+        canvas.translate(hPad + textOffset - TEXT_OFFSET_DP * density, y)
+        layout.draw(canvas)
+        canvas.restore()
+
+        y += blockHeight
+        return true
+    }
 
     if (todos.isEmpty()) {
-        canvas.drawText("No pending tasks ✓", hPad, y, donePaint)
+        canvas.drawText("No tasks — enjoy your day  ✓", hPad, y, donePaint)
     } else {
-        for (i in todos.indices) {
-            val todo  = todos[i]
-            val isDone = todo.isDone
-            val paint  = if (isDone) donePaint else itemPaint
-            val bullet = if (isDone) "✓" else "·"
-            val bulletPt = if (isDone) checkPaint else bulletPaint
-
-            val layout = StaticLayout.Builder
-                .obtain(todo.text, 0, todo.text.length, paint, textAvailWidth)
-                .setAlignment(Layout.Alignment.ALIGN_NORMAL)
-                .setMaxLines(2)
-                .setEllipsize(TextUtils.TruncateAt.END)
-                .setLineSpacing(0f, 1.15f)
-                .setIncludePad(false)
-                .build()
-
-            val lineCount  = layout.lineCount
-            val textHeight = layout.height.toFloat()
-            val cardHeight = textHeight + cardVPad * 2
-
-            val remaining = todos.size - i
-            val overflowH  = if (remaining > 1) lineSpacing * 1.1f else 0f
-            if (y + cardHeight + overflowH > maxRenderY) {
-                canvas.drawText("+ $remaining more tasks", hPad, y + cardVPad, donePaint)
-                break
+        // Pending items
+        for (todo in pending) {
+            if (!drawItem(todo, isDone = false)) {
+                val remaining = pending.size - pending.indexOf(todo)
+                canvas.drawText("+ $remaining more pending", hPad, y, overflowPaint)
+                return bitmap
             }
+        }
 
-            // Draw card background
-            val cardRect = RectF(hPad, y, hPad + cardWidth, y + cardHeight)
-            canvas.drawRoundRect(cardRect, cardCorner, cardCorner, if (isDone) cardDonePaint else cardPaint)
+        // Separator between pending and done
+        if (done.isNotEmpty() && pending.isNotEmpty()) {
+            y += sectionGap * 0.5f
+            canvas.drawLine(hPad, y, width - hPad, y, dividerPaint)
+            y += sectionGap * 0.5f + itemSp * 0.4f
+        }
 
-            // Accent left bar for pending tasks
-            if (!isDone) {
-                val accentPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
-                    color = colorPrimary
-                }
-                val accentRect = RectF(hPad, y, hPad + 4f * density, y + cardHeight)
-                canvas.drawRoundRect(accentRect, cardCorner, cardCorner, accentPaint)
-            }
-
-            // Bullet / check
-            val bulletY = y + cardVPad + layout.getLineBaseline(0)
-            canvas.drawText(bullet, hPad + cardHPad, bulletY, bulletPt)
-
-            // Text
-            canvas.save()
-            canvas.translate(textStartX, y + cardVPad)
-            layout.draw(canvas)
-            canvas.restore()
-
-            y += cardHeight + 10f * density
+        // Done items (draw up to 3, then summarise)
+        val doneToShow = done.take(3)
+        for (todo in doneToShow) {
+            if (!drawItem(todo, isDone = true)) break
+        }
+        if (done.size > 3 && y < bottomSafe) {
+            canvas.drawText("+ ${done.size - 3} more done", hPad, y, overflowPaint)
         }
     }
 
