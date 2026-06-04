@@ -1,71 +1,75 @@
 package com.mohannic.taskarma.ui.theme
 
 import android.app.Activity
-import android.os.Build
-import androidx.compose.foundation.isSystemInDarkTheme
 import androidx.compose.material3.*
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.SideEffect
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.toArgb
-import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalView
 import androidx.core.view.WindowCompat
 
 private val DarkColorScheme = darkColorScheme(
-    primary = GoogleBlue,
-    onPrimary = Color.Black,
-    primaryContainer = GoogleBlue,
-    onPrimaryContainer = Color.White,
-    secondary = GoogleGrey,
-    background = DarkBackground,
-    surface = DarkSurface,
-    onSurface = DarkOnSurface,
-    onSurfaceVariant = DarkOnSurface.copy(alpha = 0.7f),
-    error = GoogleError
+    primary              = BrandPrimary,
+    onPrimary            = Color.White,
+    primaryContainer     = Color(0xFF2A2654),
+    onPrimaryContainer   = BrandPrimaryDim,
+    secondary            = BrandSecondary,
+    onSecondary          = Color(0xFF003327),
+    secondaryContainer   = Color(0xFF003D30),
+    onSecondaryContainer = BrandSecondary,
+    tertiary             = BrandAccent,
+    background           = DarkBackground,
+    onBackground         = DarkOnBackground,
+    surface              = DarkSurface,
+    onSurface            = DarkOnSurface,
+    surfaceVariant       = DarkSurfaceVariant,
+    onSurfaceVariant     = DarkOnSurfaceVar,
+    outline              = DarkOutline,
+    error                = DarkError,
+    onError              = Color.White,
 )
 
 private val LightColorScheme = lightColorScheme(
-    primary = GoogleBlue,
-    onPrimary = Color.White,
-    primaryContainer = GoogleBlueVariant,
-    onPrimaryContainer = GoogleBlue,
-    secondary = GoogleGrey,
-    background = Color.White,
-    surface = Color.White,
-    onSurface = Color.Black,
-    onSurfaceVariant = GoogleGrey,
-    error = GoogleError
+    primary              = BrandPrimary,
+    onPrimary            = Color.White,
+    primaryContainer     = Color(0xFFE8E6FF),
+    onPrimaryContainer   = Color(0xFF3730A3),
+    secondary            = Color(0xFF00A37A),
+    onSecondary          = Color.White,
+    secondaryContainer   = Color(0xFFB3F0DE),
+    onSecondaryContainer = Color(0xFF003D30),
+    tertiary             = Color(0xFFD93025),
+    background           = LightBackground,
+    onBackground         = LightOnBackground,
+    surface              = LightSurface,
+    onSurface            = LightOnSurface,
+    surfaceVariant       = LightSurfaceVariant,
+    onSurfaceVariant     = LightOnSurfaceVar,
+    outline              = LightOutline,
+    error                = LightError,
+    onError              = Color.White,
 )
 
 @Composable
 fun TaskarmaTheme(
-    darkTheme: Boolean = isSystemInDarkTheme(),
-    // Dynamic color is available on Android 12+
-    dynamicColor: Boolean = true,
+    darkTheme: Boolean,
     content: @Composable () -> Unit
 ) {
-    val colorScheme = when {
-        dynamicColor && Build.VERSION.SDK_INT >= Build.VERSION_CODES.S -> {
-            val context = LocalContext.current
-            if (darkTheme) dynamicDarkColorScheme(context) else dynamicLightColorScheme(context)
-        }
-        darkTheme -> DarkColorScheme
-        else -> LightColorScheme
-    }
+    val colorScheme = if (darkTheme) DarkColorScheme else LightColorScheme
 
     val view = LocalView.current
     if (!view.isInEditMode) {
         SideEffect {
             val window = (view.context as Activity).window
-            window.statusBarColor = colorScheme.background.toArgb()
             WindowCompat.getInsetsController(window, view).isAppearanceLightStatusBars = !darkTheme
+            WindowCompat.getInsetsController(window, view).isAppearanceLightNavigationBars = !darkTheme
         }
     }
 
     MaterialTheme(
         colorScheme = colorScheme,
-        typography = Typography,
+        typography = AppTypography,
         content = content
     )
 }
