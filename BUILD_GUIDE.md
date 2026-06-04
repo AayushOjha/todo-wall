@@ -13,6 +13,24 @@ Generates a debuggable APK for local testing and development.
 
 ## 2. Building for Release
 
+### ⚠️ Pre-requisite: Update App Version
+Before building a production release (especially if uploading to the Google Play Store), you **must** update the version parameters. Google Play will reject uploads with a `versionCode` that has already been used.
+
+To update the version:
+1. Open [app/build.gradle.kts](file:///home/ayush/dev/mohannic/todo-wall/app/build.gradle.kts).
+2. Locate the `android { defaultConfig { ... } }` block and update:
+   * **`versionCode`**: Must be incremented by 1 (e.g., from `1` to `2`).
+   * **`versionName`**: Update the user-visible version string (e.g., from `"1.0"` to `"1.1"`).
+   ```kotlin
+   defaultConfig {
+       ...
+       versionCode = 2
+       versionName = "1.1"
+       ...
+   }
+   ```
+3. Save the file before running the build commands below.
+
 ### Release APK
 Generates a production-ready APK for direct distribution.
 ```bash
