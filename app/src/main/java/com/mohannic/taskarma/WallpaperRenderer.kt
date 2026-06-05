@@ -19,9 +19,8 @@ import androidx.core.graphics.toColorInt
 private const val FALLBACK_WIDTH       = 1080
 private const val FALLBACK_HEIGHT      = 1920
 
-private const val TOP_PAD_DP          = 90f   // reduced — wallpaper sits behind status bar
+private const val TOP_PAD_DP          = 90f   // wallpaper sits behind status bar
 private const val H_PAD_DP            = 52f
-private const val APP_LABEL_SP        = 11f   // tiny "TASKARMA" eyebrow
 private const val HEADER_SP           = 22f   // compact header "My Tasks"
 private const val ITEM_SP             = 17f   // todo text
 private const val ROW_GAP_DP          = 8f    // gap between rows
@@ -30,6 +29,9 @@ private const val BULLET_X_DP         = 16f   // bullet offset from H_PAD
 private const val TEXT_OFFSET_DP      = 26f   // text start after bullet
 private const val DIVIDER_GAP_DP      = 10f   // space after header divider
 private const val BOTTOM_SAFE_DP      = 90f   // keep clear of gesture area
+
+/** When pending tasks reach this count, completed tasks are hidden from the wallpaper. */
+private const val PENDING_BUSY_THRESHOLD = 7
 
 fun renderTodosToBitmap(context: Context, todos: List<Todo>, isDark: Boolean = true): Bitmap {
     val dm      = context.resources.displayMetrics
@@ -40,7 +42,6 @@ fun renderTodosToBitmap(context: Context, todos: List<Todo>, isDark: Boolean = t
 
     val topPad      = TOP_PAD_DP      * density
     val hPad        = H_PAD_DP        * density
-    val appLabelSp  = APP_LABEL_SP    * density
     val headerSp    = HEADER_SP       * density
     val itemSp      = ITEM_SP         * density
     val rowGap      = ROW_GAP_DP      * density
@@ -78,12 +79,6 @@ fun renderTodosToBitmap(context: Context, todos: List<Todo>, isDark: Boolean = t
     val colorDoneMark  = colorMuted
 
     // ── Paints ────────────────────────────────────────────────────────────────
-    val appLabelPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
-        color       = colorMuted
-        textSize    = appLabelSp
-        typeface    = Typeface.create("sans-serif-medium", Typeface.NORMAL)
-        letterSpacing = 0.18f
-    }
     val headerPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
         color    = colorOnBg
         textSize = headerSp
@@ -122,10 +117,6 @@ fun renderTodosToBitmap(context: Context, todos: List<Todo>, isDark: Boolean = t
 
     // ── Header ────────────────────────────────────────────────────────────────
     var y = topPad
-
-    // "TASKARMA" eyebrow
-    canvas.drawText("TASKARMA", hPad, y, appLabelPaint)
-    y += appLabelSp * 1.6f
 
     // "My Tasks" title
     canvas.drawText("My Tasks", hPad, y, headerPaint)
@@ -173,7 +164,7 @@ fun renderTodosToBitmap(context: Context, todos: List<Todo>, isDark: Boolean = t
 
     if (todos.isEmpty()) {
         canvas.drawText("No tasks — enjoy your day  ✓", hPad, y, donePaint)
-    } else if (pending.size >= 5) {
+    } else if (pending.size >= PENDING_BUSY_THRESHOLD) {
         // ── Busy mode: 5+ pending → only show pending tasks ──────────────────
         for (todo in pending) {
             if (!drawItem(todo, isDone = false)) {
