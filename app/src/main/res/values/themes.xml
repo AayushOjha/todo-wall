@@ -4,8 +4,13 @@
     <style name="Theme.Taskarma" parent="android:Theme.Material.Light.NoActionBar" />
 
     <style name="Theme.App.Starting" parent="Theme.SplashScreen">
-        <item name="windowSplashScreenBackground">#101418</item>
+        <!-- Brand deep navy background — matches the icon background exactly -->
+        <item name="windowSplashScreenBackground">#0D0F14</item>
+        <!-- Foreground icon from mipmap (the phone+check mark) -->
         <item name="windowSplashScreenAnimatedIcon">@mipmap/ic_launcher_foreground</item>
+        <!-- Icon background tint so the splash foreground blends with bg -->
+        <item name="windowSplashScreenIconBackgroundColor">#0D0F14</item>
         <item name="postSplashScreenTheme">@style/Theme.Taskarma</item>
     </style>
+
 </resources>

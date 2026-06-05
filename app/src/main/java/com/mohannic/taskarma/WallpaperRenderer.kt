@@ -173,8 +173,8 @@ fun renderTodosToBitmap(context: Context, todos: List<Todo>, isDark: Boolean = t
 
     if (todos.isEmpty()) {
         canvas.drawText("No tasks — enjoy your day  ✓", hPad, y, donePaint)
-    } else {
-        // Pending items
+    } else if (pending.size >= 5) {
+        // ── Busy mode: 5+ pending → only show pending tasks ──────────────────
         for (todo in pending) {
             if (!drawItem(todo, isDone = false)) {
                 val remaining = pending.size - pending.indexOf(todo)
@@ -182,21 +182,23 @@ fun renderTodosToBitmap(context: Context, todos: List<Todo>, isDark: Boolean = t
                 return bitmap
             }
         }
-
-        // Separator between pending and done
-        if (done.isNotEmpty() && pending.isNotEmpty()) {
-            y += sectionGap * 0.5f
+    } else {
+        // ── Relaxed mode: <5 pending → preserve original task order ──────────
+        // Render ALL todos in their natural order (pending and done interleaved
+        // exactly as the user created them), then append a done-summary footer.
+        for (todo in todos) {
+            if (!drawItem(todo, isDone = todo.isDone)) {
+                val remaining = todos.size - todos.indexOf(todo)
+                canvas.drawText("+ $remaining more", hPad, y, overflowPaint)
+                return bitmap
+            }
+        }
+        // If there were done tasks and we still have room, show a tally footer
+        if (done.isNotEmpty() && y < bottomSafe) {
+            y += sectionGap * 0.3f
             canvas.drawLine(hPad, y, width - hPad, y, dividerPaint)
-            y += sectionGap * 0.5f + itemSp * 0.4f
-        }
-
-        // Done items (draw up to 3, then summarise)
-        val doneToShow = done.take(3)
-        for (todo in doneToShow) {
-            if (!drawItem(todo, isDone = true)) break
-        }
-        if (done.size > 3 && y < bottomSafe) {
-            canvas.drawText("+ ${done.size - 3} more done", hPad, y, overflowPaint)
+            y += dividerGap + itemSp * 0.5f
+            canvas.drawText("${done.size} of ${todos.size} tasks done", hPad, y, overflowPaint)
         }
     }
 
