@@ -9,4 +9,5 @@ data class Todo(
     val id: Long = 0L,
     val text: String,
     val isDone: Boolean = false,
+    val isArchived: Boolean = false,
 )

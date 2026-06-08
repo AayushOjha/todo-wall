@@ -9,7 +9,7 @@ import kotlinx.coroutines.flow.Flow
 
 @Dao
 interface TodoDao {
-    @Query("SELECT * FROM todos ORDER BY id ASC")
+    @Query("SELECT * FROM todos WHERE isArchived = 0 ORDER BY id ASC")
     fun observeAll(): Flow<List<Todo>>
 
     @Insert
@@ -20,4 +20,7 @@ interface TodoDao {
 
     @Delete
     suspend fun delete(todo: Todo)
+
+    @Query("UPDATE todos SET isArchived = 1 WHERE id = :id")
+    suspend fun archiveById(id: Long)
 }

@@ -56,6 +56,7 @@ fun TodoScreen(
     val scope = rememberCoroutineScope()
     var showAddSheet by remember { mutableStateOf(false) }
     var showProfileSheet by remember { mutableStateOf(false) }
+    var editingTodo by remember { mutableStateOf<Todo?>(null) }
     var isFirstEmission by remember { mutableStateOf(true) }
 
     val listState = rememberLazyListState()
@@ -152,7 +153,9 @@ fun TodoScreen(
                             TodoItemCard(
                                 todo = todo,
                                 onToggle = { scope.launch { dao.update(todo.copy(isDone = !todo.isDone)) } },
-                                onDelete = { scope.launch { dao.delete(todo) } }
+                                onDelete = { scope.launch { dao.delete(todo) } },
+                                onEdit = { editingTodo = todo },
+                                onArchive = null
                             )
                         }
                     }
@@ -166,7 +169,9 @@ fun TodoScreen(
                             TodoItemCard(
                                 todo = todo,
                                 onToggle = { scope.launch { dao.update(todo.copy(isDone = !todo.isDone)) } },
-                                onDelete = { scope.launch { dao.delete(todo) } }
+                                onDelete = { scope.launch { dao.delete(todo) } },
+                                onEdit = null,
+                                onArchive = { scope.launch { dao.archiveById(todo.id) } }
                             )
                         }
                     }
@@ -180,6 +185,17 @@ fun TodoScreen(
                 onAdd = { text ->
                     scope.launch { dao.insert(Todo(text = text)) }
                     showAddSheet = false
+                }
+            )
+        }
+
+        editingTodo?.let { todo ->
+            EditTaskBottomSheet(
+                currentText = todo.text,
+                onDismiss   = { editingTodo = null },
+                onSave      = { newText ->
+                    scope.launch { dao.update(todo.copy(text = newText)) }
+                    editingTodo = null
                 }
             )
         }
@@ -442,6 +458,8 @@ private fun TodoItemCard(
     todo: Todo,
     onToggle: () -> Unit,
     onDelete: () -> Unit,
+    onEdit: (() -> Unit)?,
+    onArchive: (() -> Unit)?,
 ) {
     val isDone = todo.isDone
     val cardAlpha by animateFloatAsState(
@@ -493,6 +511,27 @@ private fun TodoItemCard(
                 maxLines = 2,
                 overflow = TextOverflow.Ellipsis
             )
+
+            // Edit (pending) or Archive (completed)
+            if (isDone && onArchive != null) {
+                IconButton(onClick = onArchive, modifier = Modifier.size(48.dp)) {
+                    Icon(
+                        imageVector = Icons.Default.Archive,
+                        contentDescription = "Archive",
+                        tint = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.6f),
+                        modifier = Modifier.size(18.dp)
+                    )
+                }
+            } else if (!isDone && onEdit != null) {
+                IconButton(onClick = onEdit, modifier = Modifier.size(48.dp)) {
+                    Icon(
+                        imageVector = Icons.Default.Edit,
+                        contentDescription = "Edit",
+                        tint = MaterialTheme.colorScheme.primary.copy(alpha = 0.7f),
+                        modifier = Modifier.size(18.dp)
+                    )
+                }
+            }
 
             IconButton(onClick = onDelete, modifier = Modifier.size(48.dp)) {
                 Icon(
@@ -610,6 +649,115 @@ fun AddTaskBottomSheet(
                         containerColor = MaterialTheme.colorScheme.primary
                     )
                 ) { Text("Save Task", fontWeight = FontWeight.SemiBold) }
+            }
+        }
+    }
+}
+
+// ────────────────────────────────────────────────────────────────────────────
+// Edit Task Bottom Sheet
+// ────────────────────────────────────────────────────────────────────────────
+
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+fun EditTaskBottomSheet(
+    currentText: String,
+    onDismiss: () -> Unit,
+    onSave: (String) -> Unit
+) {
+    var text by remember(currentText) { mutableStateOf(currentText) }
+    val sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)
+    val keyboard = LocalSoftwareKeyboardController.current
+
+    ModalBottomSheet(
+        onDismissRequest = onDismiss,
+        sheetState = sheetState,
+        dragHandle = {
+            Box(
+                Modifier
+                    .fillMaxWidth()
+                    .padding(top = 12.dp, bottom = 8.dp),
+                contentAlignment = Alignment.Center
+            ) {
+                Box(
+                    Modifier
+                        .size(width = 36.dp, height = 4.dp)
+                        .clip(CircleShape)
+                        .background(MaterialTheme.colorScheme.outline.copy(alpha = 0.4f))
+                )
+            }
+        },
+        containerColor = MaterialTheme.colorScheme.surface,
+        shape = RoundedCornerShape(topStart = 24.dp, topEnd = 24.dp)
+    ) {
+        Column(
+            modifier = Modifier
+                .padding(horizontal = 24.dp)
+                .padding(bottom = 32.dp)
+                .fillMaxWidth()
+        ) {
+            Text(
+                "Edit Task",
+                style = MaterialTheme.typography.titleLarge,
+                fontWeight = FontWeight.Bold,
+                color = MaterialTheme.colorScheme.onSurface
+            )
+            Spacer(Modifier.height(4.dp))
+            Text(
+                "Update your task description",
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant
+            )
+            Spacer(Modifier.height(20.dp))
+            OutlinedTextField(
+                value = text,
+                onValueChange = { text = it },
+                placeholder = {
+                    Text(
+                        "Task description",
+                        color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.5f)
+                    )
+                },
+                modifier = Modifier.fillMaxWidth(),
+                shape = RoundedCornerShape(14.dp),
+                singleLine = true,
+                keyboardOptions = KeyboardOptions(
+                    capitalization = KeyboardCapitalization.Sentences,
+                    imeAction = ImeAction.Done
+                ),
+                keyboardActions = KeyboardActions(
+                    onDone = {
+                        keyboard?.hide()
+                        if (text.isNotBlank()) onSave(text)
+                    }
+                ),
+                colors = OutlinedTextFieldDefaults.colors(
+                    focusedBorderColor = MaterialTheme.colorScheme.primary,
+                    unfocusedBorderColor = MaterialTheme.colorScheme.outline,
+                    focusedContainerColor = MaterialTheme.colorScheme.surfaceVariant,
+                    unfocusedContainerColor = MaterialTheme.colorScheme.surfaceVariant,
+                )
+            )
+            Spacer(Modifier.height(20.dp))
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.spacedBy(12.dp)
+            ) {
+                OutlinedButton(
+                    onClick = onDismiss,
+                    modifier = Modifier.weight(1f).height(50.dp),
+                    shape = RoundedCornerShape(14.dp)
+                ) { Text("Cancel") }
+
+                Button(
+                    onClick = { if (text.isNotBlank()) onSave(text) },
+                    enabled = text.isNotBlank() && text != currentText,
+                    modifier = Modifier.weight(1f).height(50.dp),
+                    shape = RoundedCornerShape(14.dp),
+                    colors = ButtonDefaults.buttonColors(
+                        containerColor = MaterialTheme.colorScheme.primary
+                    )
+                ) { Text("Update", fontWeight = FontWeight.SemiBold) }
             }
         }
     }

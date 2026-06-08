@@ -30,8 +30,8 @@ private const val TEXT_OFFSET_DP      = 26f   // text start after bullet
 private const val DIVIDER_GAP_DP      = 10f   // space after header divider
 private const val BOTTOM_SAFE_DP      = 90f   // keep clear of gesture area
 
-/** When pending tasks reach this count, completed tasks are hidden from the wallpaper. */
-private const val PENDING_BUSY_THRESHOLD = 7
+/** When total tasks (pending + completed) reach this count, the wallpaper groups pending first. */
+private const val BUSY_THRESHOLD = 7
 
 fun renderTodosToBitmap(context: Context, todos: List<Todo>, isDark: Boolean = true): Bitmap {
     val dm      = context.resources.displayMetrics
@@ -164,8 +164,8 @@ fun renderTodosToBitmap(context: Context, todos: List<Todo>, isDark: Boolean = t
 
     if (todos.isEmpty()) {
         canvas.drawText("No tasks — enjoy your day  ✓", hPad, y, donePaint)
-    } else if (pending.size >= PENDING_BUSY_THRESHOLD) {
-        // ── Busy mode: 5+ pending → only show pending tasks ──────────────────
+    } else if (todos.size >= BUSY_THRESHOLD) {
+        // ── Busy mode: 7+ total tasks → show pending first, then completed ──
         for (todo in pending) {
             if (!drawItem(todo, isDone = false)) {
                 val remaining = pending.size - pending.indexOf(todo)
@@ -173,8 +173,21 @@ fun renderTodosToBitmap(context: Context, todos: List<Todo>, isDark: Boolean = t
                 return bitmap
             }
         }
+        // Completed tasks below pending
+        if (done.isNotEmpty() && y < bottomSafe) {
+            y += sectionGap * 0.3f
+            canvas.drawLine(hPad, y, width - hPad, y, dividerPaint)
+            y += dividerGap + itemSp * 0.5f
+            for (todo in done) {
+                if (!drawItem(todo, isDone = true)) {
+                    val remaining = done.size - done.indexOf(todo)
+                    canvas.drawText("+ $remaining more done", hPad, y, overflowPaint)
+                    return bitmap
+                }
+            }
+        }
     } else {
-        // ── Relaxed mode: <5 pending → preserve original task order ──────────
+        // ── Relaxed mode: <7 total → preserve original task order ─────────────
         // Render ALL todos in their natural order (pending and done interleaved
         // exactly as the user created them), then append a done-summary footer.
         for (todo in todos) {
