@@ -52,11 +52,14 @@ fun TodoScreen(
     val dao = remember(context) { TodoDatabase.getInstance(context).todoDao() }
     val todosState by dao.observeAll().collectAsState(initial = null)
     val todos = todosState ?: emptyList()
+    val archivedState by dao.observeArchived().collectAsState(initial = emptyList())
+    val archivedTodos = archivedState
 
     val scope = rememberCoroutineScope()
     var showAddSheet by remember { mutableStateOf(false) }
     var showProfileSheet by remember { mutableStateOf(false) }
     var editingTodo by remember { mutableStateOf<Todo?>(null) }
+    var showArchived by remember { mutableStateOf(false) }
     var isFirstEmission by remember { mutableStateOf(true) }
 
     val listState = rememberLazyListState()
@@ -140,7 +143,7 @@ fun TodoScreen(
                     contentPadding = PaddingValues(
                         start = 16.dp, end = 16.dp, top = 8.dp, bottom = 96.dp
                     ),
-                    verticalArrangement = Arrangement.spacedBy(8.dp)
+                    verticalArrangement = Arrangement.spacedBy(6.dp)
                 ) {
                     val pending = todos.filter { !it.isDone }
                     val done    = todos.filter { it.isDone }
@@ -173,6 +176,28 @@ fun TodoScreen(
                                 onEdit = null,
                                 onArchive = { scope.launch { dao.archiveById(todo.id) } }
                             )
+                        }
+                    }
+
+                    // ── Archived section ─────────────────────────────────
+                    if (archivedTodos.isNotEmpty()) {
+                        item { Spacer(Modifier.height(8.dp)) }
+                        item {
+                            ExpandableSectionLabel(
+                                title = "Archived",
+                                count = archivedTodos.size,
+                                expanded = showArchived,
+                                onToggle = { showArchived = !showArchived }
+                            )
+                        }
+                        if (showArchived) {
+                            items(items = archivedTodos, key = { "archived_${it.id}" }) { todo ->
+                                ArchivedItemCard(
+                                    todo = todo,
+                                    onUnarchive = { scope.launch { dao.unarchiveById(todo.id) } },
+                                    onDelete    = { scope.launch { dao.delete(todo) } }
+                                )
+                            }
                         }
                     }
                 }
@@ -468,9 +493,7 @@ private fun TodoItemCard(
     )
 
     Surface(
-        modifier = Modifier
-            .fillMaxWidth()
-            .clickable { onToggle() },
+        modifier = Modifier.fillMaxWidth(),
         shape = RoundedCornerShape(14.dp),
         color = if (isDone)
             MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f)
@@ -481,16 +504,16 @@ private fun TodoItemCard(
         Row(
             modifier = Modifier
                 .fillMaxWidth()
-                .padding(horizontal = 4.dp, vertical = 6.dp),
+                .padding(start = 4.dp, end = 12.dp, top = 4.dp, bottom = 4.dp),
             verticalAlignment = Alignment.CenterVertically,
         ) {
-            // Checkbox-style toggle
-            IconButton(onClick = onToggle, modifier = Modifier.size(48.dp)) {
+            // Checkbox-style toggle — only this toggles completion
+            IconButton(onClick = onToggle, modifier = Modifier.size(44.dp)) {
                 Crossfade(targetState = isDone, label = "check_icon") { done ->
                     Icon(
                         imageVector = if (done) Icons.Default.CheckCircle
                                       else Icons.Outlined.RadioButtonUnchecked,
-                        contentDescription = null,
+                        contentDescription = if (done) "Mark incomplete" else "Mark complete",
                         tint = if (done) MaterialTheme.colorScheme.primary
                                else MaterialTheme.colorScheme.onSurfaceVariant,
                         modifier = Modifier.size(22.dp)
@@ -500,7 +523,9 @@ private fun TodoItemCard(
 
             Text(
                 text = todo.text,
-                modifier = Modifier.weight(1f),
+                modifier = Modifier
+                    .weight(1f)
+                    .padding(end = 8.dp),
                 style = MaterialTheme.typography.bodyLarge.copy(
                     color = if (isDone)
                         MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = cardAlpha)
@@ -512,35 +537,171 @@ private fun TodoItemCard(
                 overflow = TextOverflow.Ellipsis
             )
 
-            // Edit (pending) or Archive (completed)
-            if (isDone && onArchive != null) {
-                IconButton(onClick = onArchive, modifier = Modifier.size(48.dp)) {
-                    Icon(
-                        imageVector = Icons.Default.Archive,
-                        contentDescription = "Archive",
-                        tint = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.6f),
-                        modifier = Modifier.size(18.dp)
-                    )
+            // Compact action icons
+            Row(
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(2.dp)
+            ) {
+                // Edit (pending) or Archive (completed)
+                if (isDone && onArchive != null) {
+                    IconButton(onClick = onArchive, modifier = Modifier.size(36.dp)) {
+                        Icon(
+                            imageVector = Icons.Default.Archive,
+                            contentDescription = "Archive",
+                            tint = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.65f),
+                            modifier = Modifier.size(18.dp)
+                        )
+                    }
+                } else if (!isDone && onEdit != null) {
+                    IconButton(onClick = onEdit, modifier = Modifier.size(36.dp)) {
+                        Icon(
+                            imageVector = Icons.Default.Edit,
+                            contentDescription = "Edit",
+                            tint = MaterialTheme.colorScheme.primary.copy(alpha = 0.7f),
+                            modifier = Modifier.size(18.dp)
+                        )
+                    }
                 }
-            } else if (!isDone && onEdit != null) {
-                IconButton(onClick = onEdit, modifier = Modifier.size(48.dp)) {
-                    Icon(
-                        imageVector = Icons.Default.Edit,
-                        contentDescription = "Edit",
-                        tint = MaterialTheme.colorScheme.primary.copy(alpha = 0.7f),
-                        modifier = Modifier.size(18.dp)
-                    )
-                }
-            }
 
-            IconButton(onClick = onDelete, modifier = Modifier.size(48.dp)) {
-                Icon(
-                    imageVector = Icons.Default.DeleteOutline,
-                    contentDescription = "Delete",
-                    tint = MaterialTheme.colorScheme.error.copy(alpha = 0.55f),
-                    modifier = Modifier.size(18.dp)
-                )
+                IconButton(onClick = onDelete, modifier = Modifier.size(36.dp)) {
+                    Icon(
+                        imageVector = Icons.Default.DeleteOutline,
+                        contentDescription = "Delete",
+                        tint = MaterialTheme.colorScheme.error.copy(alpha = 0.55f),
+                        modifier = Modifier.size(18.dp)
+                    )
+                }
             }
+        }
+    }
+}
+
+// ────────────────────────────────────────────────────────────────────────────
+// Archived Item Card
+// ────────────────────────────────────────────────────────────────────────────
+
+@Composable
+private fun ArchivedItemCard(
+    todo: Todo,
+    onUnarchive: () -> Unit,
+    onDelete: () -> Unit,
+) {
+    Surface(
+        modifier = Modifier.fillMaxWidth(),
+        shape = RoundedCornerShape(14.dp),
+        color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.35f),
+        tonalElevation = 0.dp,
+    ) {
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(start = 16.dp, end = 12.dp, top = 10.dp, bottom = 10.dp),
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            Icon(
+                imageVector = Icons.Default.Archive,
+                contentDescription = null,
+                tint = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.4f),
+                modifier = Modifier.size(18.dp)
+            )
+
+            Spacer(Modifier.width(12.dp))
+
+            Text(
+                text = todo.text,
+                modifier = Modifier
+                    .weight(1f)
+                    .padding(end = 8.dp),
+                style = MaterialTheme.typography.bodyMedium.copy(
+                    color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.6f),
+                    textDecoration = if (todo.isDone) TextDecoration.LineThrough else TextDecoration.None
+                ),
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis
+            )
+
+            Row(
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(2.dp)
+            ) {
+                // Unarchive / restore
+                IconButton(onClick = onUnarchive, modifier = Modifier.size(36.dp)) {
+                    Icon(
+                        imageVector = Icons.Default.Unarchive,
+                        contentDescription = "Restore",
+                        tint = MaterialTheme.colorScheme.primary.copy(alpha = 0.6f),
+                        modifier = Modifier.size(18.dp)
+                    )
+                }
+                // Delete permanently
+                IconButton(onClick = onDelete, modifier = Modifier.size(36.dp)) {
+                    Icon(
+                        imageVector = Icons.Default.DeleteOutline,
+                        contentDescription = "Delete",
+                        tint = MaterialTheme.colorScheme.error.copy(alpha = 0.45f),
+                        modifier = Modifier.size(18.dp)
+                    )
+                }
+            }
+        }
+    }
+}
+
+// ────────────────────────────────────────────────────────────────────────────
+// Expandable Section Label
+// ────────────────────────────────────────────────────────────────────────────
+
+@Composable
+private fun ExpandableSectionLabel(
+    title: String,
+    count: Int,
+    expanded: Boolean,
+    onToggle: () -> Unit,
+) {
+    Surface(
+        modifier = Modifier
+            .fillMaxWidth()
+            .clip(RoundedCornerShape(10.dp))
+            .clickable(onClick = onToggle),
+        color = Color.Transparent,
+    ) {
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(horizontal = 4.dp, vertical = 6.dp),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.SpaceBetween
+        ) {
+            Row(
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(8.dp)
+            ) {
+                Text(
+                    text = title.uppercase(),
+                    style = MaterialTheme.typography.labelSmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    letterSpacing = 1.2.sp,
+                    fontWeight = FontWeight.SemiBold
+                )
+                Surface(
+                    shape = CircleShape,
+                    color = MaterialTheme.colorScheme.surfaceVariant
+                ) {
+                    Text(
+                        text = "$count",
+                        modifier = Modifier.padding(horizontal = 8.dp, vertical = 2.dp),
+                        style = MaterialTheme.typography.labelSmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        fontWeight = FontWeight.Bold
+                    )
+                }
+            }
+            Icon(
+                imageVector = if (expanded) Icons.Default.ExpandLess else Icons.Default.ExpandMore,
+                contentDescription = if (expanded) "Collapse" else "Expand",
+                tint = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.6f),
+                modifier = Modifier.size(20.dp)
+            )
         }
     }
 }

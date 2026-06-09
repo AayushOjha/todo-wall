@@ -12,6 +12,9 @@ interface TodoDao {
     @Query("SELECT * FROM todos WHERE isArchived = 0 ORDER BY id ASC")
     fun observeAll(): Flow<List<Todo>>
 
+    @Query("SELECT * FROM todos WHERE isArchived = 1 ORDER BY id DESC")
+    fun observeArchived(): Flow<List<Todo>>
+
     @Insert
     suspend fun insert(todo: Todo): Long
 
@@ -23,4 +26,7 @@ interface TodoDao {
 
     @Query("UPDATE todos SET isArchived = 1 WHERE id = :id")
     suspend fun archiveById(id: Long)
+
+    @Query("UPDATE todos SET isArchived = 0 WHERE id = :id")
+    suspend fun unarchiveById(id: Long)
 }
