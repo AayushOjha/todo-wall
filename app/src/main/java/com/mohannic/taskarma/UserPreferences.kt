@@ -15,7 +15,8 @@ object UserPreferences {
     private const val KEY_USER_NAME     = "user_name"
     private const val KEY_DARK_MODE     = "dark_mode"
     private const val KEY_ONBOARDED     = "onboarding_done"
-    private const val KEY_WALLPAPER_HASH= "last_wallpaper_hash"
+    private const val KEY_WALLPAPER_HASH        = "last_wallpaper_hash"
+    private const val KEY_LAST_VIEWED_GROUP_ID  = "last_viewed_group_id"
 
     private fun prefs(context: Context): SharedPreferences =
         context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
@@ -52,4 +53,12 @@ object UserPreferences {
 
     fun setLastWallpaperHash(context: Context, hash: Int) =
         prefs(context).edit { putInt(KEY_WALLPAPER_HASH, hash) }
+
+    // ── Last Viewed Group ────────────────────────────────────────────────────
+
+    fun getLastViewedGroupId(context: Context): Long =
+        prefs(context).getLong(KEY_LAST_VIEWED_GROUP_ID, -1L)
+
+    fun setLastViewedGroupId(context: Context, groupId: Long) =
+        prefs(context).edit { putLong(KEY_LAST_VIEWED_GROUP_ID, groupId) }
 }
