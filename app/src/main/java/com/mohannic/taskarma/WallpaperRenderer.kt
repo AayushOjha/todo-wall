@@ -33,7 +33,12 @@ private const val BOTTOM_SAFE_DP      = 90f   // keep clear of gesture area
 /** When total tasks (pending + completed) reach this count, the wallpaper groups pending first. */
 private const val BUSY_THRESHOLD = 7
 
-fun renderTodosToBitmap(context: Context, todos: List<Todo>, isDark: Boolean = true): Bitmap {
+fun renderTodosToBitmap(
+    context: Context,
+    groupName: String,
+    todos: List<Todo>,
+    isDark: Boolean = true
+): Bitmap {
     val dm      = context.resources.displayMetrics
     val density = dm.density
 
@@ -118,8 +123,8 @@ fun renderTodosToBitmap(context: Context, todos: List<Todo>, isDark: Boolean = t
     // ── Header ────────────────────────────────────────────────────────────────
     var y = topPad
 
-    // "My Tasks" title
-    canvas.drawText("My Tasks", hPad, y, headerPaint)
+    // Group title
+    canvas.drawText(groupName, hPad, y, headerPaint)
     y += headerSp * 0.55f
 
     // divider line
