@@ -14,3 +14,7 @@
 
 # Kotlin
 .kotlin/
+
+# Git worktrees
+.worktrees/
+
