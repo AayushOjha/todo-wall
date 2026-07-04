@@ -15,6 +15,9 @@ interface TodoDao {
     @Query("SELECT * FROM todos WHERE isArchived = 1 ORDER BY id DESC")
     fun observeArchived(): Flow<List<Todo>>
 
+    @Query("SELECT * FROM todos WHERE isArchived = 0 AND groupId = :groupId ORDER BY id ASC")
+    fun observeByGroup(groupId: Long): Flow<List<Todo>>
+
     @Insert
     suspend fun insert(todo: Todo): Long
 
