@@ -6,6 +6,9 @@ import androidx.room.Room
 import androidx.room.RoomDatabase
 import androidx.room.migration.Migration
 import androidx.sqlite.db.SupportSQLiteDatabase
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.launch
 
 @Database(entities = [Todo::class, TodoGroup::class], version = 3, exportSchema = false)
 abstract class TodoDatabase : RoomDatabase() {
@@ -70,6 +73,21 @@ abstract class TodoDatabase : RoomDatabase() {
             }
         }
 
+        /**
+         * Callback that seeds a default "My Tasks" group when the database
+         * is created from scratch (fresh install). Migration 2→3 handles
+         * the seed for existing users who upgrade.
+         */
+        private val seedCallback = object : RoomDatabase.Callback() {
+            override fun onCreate(db: SupportSQLiteDatabase) {
+                super.onCreate(db)
+                db.execSQL(
+                    "INSERT OR IGNORE INTO todo_groups (name, sortOrder, createdAt) " +
+                    "VALUES ('My Tasks', 0, ${System.currentTimeMillis()})"
+                )
+            }
+        }
+
         fun getInstance(context: Context): TodoDatabase =
             INSTANCE ?: synchronized(this) {
                 INSTANCE ?: Room.databaseBuilder(
@@ -78,6 +96,7 @@ abstract class TodoDatabase : RoomDatabase() {
                     "todo.db",
                 )
                     .addMigrations(MIGRATION_1_2, MIGRATION_2_3)
+                    .addCallback(seedCallback)
                     .build()
                     .also { INSTANCE = it }
             }

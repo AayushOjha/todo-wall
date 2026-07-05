@@ -26,4 +26,17 @@ interface TodoGroupDao {
 
     @Delete
     suspend fun delete(group: TodoGroup)
+
+    @Query("SELECT COUNT(*) FROM todo_groups")
+    suspend fun getCount(): Int
+
+    /**
+     * Runtime safety net: ensures at least one group exists.
+     * Returns the id of the default group.
+     */
+    suspend fun ensureDefaultGroup(): Long {
+        val existing = getDefaultGroup()
+        if (existing != null) return existing.id
+        return insert(TodoGroup(name = "My Tasks", sortOrder = 0))
+    }
 }

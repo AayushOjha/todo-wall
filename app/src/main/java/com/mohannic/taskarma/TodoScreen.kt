@@ -41,6 +41,7 @@ import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import java.text.SimpleDateFormat
 import java.util.*
+import android.widget.Toast
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -81,8 +82,15 @@ fun TodoScreen(
         groups.find { it.id == activeGroupId } ?: defaultGroup
     }
 
+    // Ensure at least one default group always exists
     LaunchedEffect(groups, lastViewedGroupId) {
-        if (groups.isEmpty()) return@LaunchedEffect
+        if (groups.isEmpty()) {
+            // Create default group — this will trigger recomposition via the Flow
+            val defaultId = groupDao.ensureDefaultGroup()
+            activeGroupId = defaultId
+            UserPreferences.setLastViewedGroupId(context, defaultId)
+            return@LaunchedEffect
+        }
         if (activeGroupId == -1L) {
             activeGroupId = groups.find { it.id == lastViewedGroupId }?.id ?: groups.first().id
         }
@@ -384,6 +392,14 @@ fun TodoScreen(
                 initialGroupId = activeGroup?.id ?: -1L,
                 onDismiss = { showAddSheet = false },
                 onAdd = { text, groupId ->
+                    if (groupId <= 0L) {
+                        Toast.makeText(
+                            context,
+                            "Please create a list first",
+                            Toast.LENGTH_SHORT
+                        ).show()
+                        return@AddTaskBottomSheet
+                    }
                     scope.launch { dao.insert(Todo(text = text, groupId = groupId)) }
                     showAddSheet = false
                 }
@@ -442,11 +458,10 @@ fun TodoScreen(
                             scope.launch {
                                 groupDao.delete(deleting)
                                 if (activeGroupId == deleting.id) {
-                                    val fallback = groupDao.getDefaultGroup()
-                                    fallback?.let {
-                                        activeGroupId = it.id
-                                        UserPreferences.setLastViewedGroupId(context, it.id)
-                                    }
+                                    // Always ensure at least one group exists after deletion
+                                    val fallbackId = groupDao.ensureDefaultGroup()
+                                    activeGroupId = fallbackId
+                                    UserPreferences.setLastViewedGroupId(context, fallbackId)
                                 }
                             }
                             groupToDelete = null
