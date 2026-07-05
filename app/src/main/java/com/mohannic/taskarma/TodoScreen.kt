@@ -50,8 +50,6 @@ fun TodoScreen(
 ) {
     val context = LocalContext.current
     val dao = remember(context) { TodoDatabase.getInstance(context).todoDao() }
-    val todosState by dao.observeAll().collectAsState(initial = null)
-    val todos = todosState ?: emptyList()
     val archivedState by dao.observeArchived().collectAsState(initial = emptyList())
     val archivedTodos = archivedState
 
@@ -62,19 +60,49 @@ fun TodoScreen(
     var showArchived by remember { mutableStateOf(false) }
     var isFirstEmission by remember { mutableStateOf(true) }
 
+    // ── Groups ───────────────────────────────────────────────────────────────
+    val groupDao = remember(context) { TodoDatabase.getInstance(context).todoGroupDao() }
+    val groups by groupDao.observeAll().collectAsState(initial = emptyList())
+    val lastViewedGroupId = remember { UserPreferences.getLastViewedGroupId(context) }
+    var activeGroupId by remember { mutableLongStateOf(-1L) }
+    var showCreateGroupSheet by remember { mutableStateOf(false) }
+    var groupToRename by remember { mutableStateOf<TodoGroup?>(null) }
+    var groupToDelete by remember { mutableStateOf<TodoGroup?>(null) }
+    var groupMenu by remember { mutableStateOf<TodoGroup?>(null) }
+
     val listState = rememberLazyListState()
     val isScrolled by remember { derivedStateOf { listState.firstVisibleItemIndex > 0 || listState.firstVisibleItemScrollOffset > 0 } }
 
-    // Automatic Wallpaper Update — now passes isDarkMode so it picks the right palette
-    LaunchedEffect(todosState, isDarkMode) {
-        val currentTodos = todosState ?: return@LaunchedEffect
+    val defaultGroup = remember(groups) { groups.firstOrNull() }
+    val activeGroup = remember(groups, activeGroupId) {
+        groups.find { it.id == activeGroupId } ?: defaultGroup
+    }
+
+    LaunchedEffect(groups, lastViewedGroupId) {
+        if (groups.isEmpty()) return@LaunchedEffect
+        if (activeGroupId == -1L) {
+            activeGroupId = groups.find { it.id == lastViewedGroupId }?.id ?: groups.first().id
+        }
+    }
+
+    val groupTodosState by activeGroup?.let { group ->
+        dao.observeByGroup(group.id).collectAsState(initial = null)
+    } ?: remember { mutableStateOf(null) }
+    val todos = groupTodosState ?: emptyList()
+
+    // Automatic Wallpaper Update — reflects the active group
+    LaunchedEffect(groupTodosState, isDarkMode, activeGroupId) {
+        val currentTodos = groupTodosState ?: return@LaunchedEffect
+        val groupName = activeGroup?.name ?: "My Tasks"
         withContext(Dispatchers.IO) {
-            val currentHash = currentTodos.hashCode() * 31 + isDarkMode.hashCode()
+            val currentHash = currentTodos.hashCode() * 31 +
+                              isDarkMode.hashCode() * 31 +
+                              activeGroupId.hashCode()
             val lastHash = UserPreferences.getLastWallpaperHash(context)
 
             if (isFirstEmission || currentHash != lastHash) {
                 try {
-                    val bitmap = renderTodosToBitmap(context, currentTodos, isDark = isDarkMode)
+                    val bitmap = renderTodosToBitmap(context, groupName, currentTodos, isDark = isDarkMode)
                     val wallpaperManager = WallpaperManager.getInstance(context)
                     try {
                         wallpaperManager.suggestDesiredDimensions(bitmap.width, bitmap.height)
@@ -127,13 +155,86 @@ fun TodoScreen(
                 .padding(innerPadding)
                 .fillMaxSize()
         ) {
+            // Group tabs
+            if (groups.isNotEmpty()) {
+                ScrollableTabRow(
+                    selectedTabIndex = groups.indexOfFirst { it.id == activeGroupId }.coerceAtLeast(0),
+                    containerColor = MaterialTheme.colorScheme.background,
+                    contentColor = MaterialTheme.colorScheme.primary,
+                    edgePadding = 16.dp,
+                    indicator = {},
+                    divider = {}
+                ) {
+                    groups.forEach { group ->
+                        Tab(
+                            selected = group.id == activeGroupId,
+                            onClick = {
+                                activeGroupId = group.id
+                                UserPreferences.setLastViewedGroupId(context, group.id)
+                            },
+                            text = {
+                                Row(
+                                    verticalAlignment = Alignment.CenterVertically,
+                                    horizontalArrangement = Arrangement.spacedBy(4.dp)
+                                ) {
+                                    Text(group.name)
+                                    Box {
+                                        var expanded by remember { mutableStateOf(false) }
+                                        IconButton(
+                                            onClick = { expanded = true },
+                                            modifier = Modifier.size(20.dp)
+                                        ) {
+                                            Icon(
+                                                imageVector = Icons.Default.MoreVert,
+                                                contentDescription = "Group options",
+                                                modifier = Modifier.size(16.dp)
+                                            )
+                                        }
+                                        DropdownMenu(
+                                            expanded = expanded,
+                                            onDismissRequest = { expanded = false }
+                                        ) {
+                                            DropdownMenuItem(
+                                                text = { Text("Rename") },
+                                                onClick = {
+                                                    groupToRename = group
+                                                    expanded = false
+                                                }
+                                            )
+                                            if (group.id != defaultGroup?.id) {
+                                                DropdownMenuItem(
+                                                    text = { Text("Delete") },
+                                                    onClick = {
+                                                        groupToDelete = group
+                                                        expanded = false
+                                                    }
+                                                )
+                                            }
+                                        }
+                                    }
+                                }
+                            }
+                        )
+                    }
+                    Tab(
+                        selected = false,
+                        onClick = { showCreateGroupSheet = true },
+                        icon = { Icon(Icons.Default.Add, contentDescription = "Create group") },
+                        text = { Text("") }
+                    )
+                }
+            }
+
             // Stats strip
             if (todos.isNotEmpty()) {
                 StatsStrip(pending = pendingCount, done = doneCount)
             }
 
             if (todos.isEmpty()) {
-                EmptyState(modifier = Modifier.weight(1f))
+                EmptyState(
+                    groupName = activeGroup?.name ?: "this group",
+                    modifier = Modifier.weight(1f)
+                )
             } else {
                 LazyColumn(
                     state = listState,
@@ -206,9 +307,11 @@ fun TodoScreen(
 
         if (showAddSheet) {
             AddTaskBottomSheet(
+                groups = groups,
+                initialGroupId = activeGroup?.id ?: -1L,
                 onDismiss = { showAddSheet = false },
-                onAdd = { text ->
-                    scope.launch { dao.insert(Todo(text = text)) }
+                onAdd = { text, groupId ->
+                    scope.launch { dao.insert(Todo(text = text, groupId = groupId)) }
                     showAddSheet = false
                 }
             )
@@ -217,10 +320,68 @@ fun TodoScreen(
         editingTodo?.let { todo ->
             EditTaskBottomSheet(
                 currentText = todo.text,
-                onDismiss   = { editingTodo = null },
-                onSave      = { newText ->
-                    scope.launch { dao.update(todo.copy(text = newText)) }
+                currentGroupId = todo.groupId,
+                groups = groups,
+                onDismiss = { editingTodo = null },
+                onSave = { newText, newGroupId ->
+                    scope.launch {
+                        dao.update(todo.copy(text = newText, groupId = newGroupId))
+                    }
                     editingTodo = null
+                }
+            )
+        }
+
+        if (showCreateGroupSheet) {
+            CreateGroupBottomSheet(
+                onDismiss = { showCreateGroupSheet = false },
+                onCreate = { name ->
+                    scope.launch {
+                        val id = groupDao.insert(TodoGroup(name = name))
+                        activeGroupId = id
+                        UserPreferences.setLastViewedGroupId(context, id)
+                    }
+                    showCreateGroupSheet = false
+                }
+            )
+        }
+
+        groupToRename?.let { group ->
+            RenameGroupBottomSheet(
+                currentName = group.name,
+                onDismiss = { groupToRename = null },
+                onRename = { newName ->
+                    scope.launch { groupDao.update(group.copy(name = newName)) }
+                    groupToRename = null
+                }
+            )
+        }
+
+        if (groupToDelete != null) {
+            val deleting = groupToDelete!!
+            AlertDialog(
+                onDismissRequest = { groupToDelete = null },
+                title = { Text("Delete group?") },
+                text = { Text("All tasks in \"${deleting.name}\" will be permanently deleted.") },
+                confirmButton = {
+                    TextButton(
+                        onClick = {
+                            scope.launch {
+                                groupDao.delete(deleting)
+                                if (activeGroupId == deleting.id) {
+                                    val fallback = groupDao.getDefaultGroup()
+                                    fallback?.let {
+                                        activeGroupId = it.id
+                                        UserPreferences.setLastViewedGroupId(context, it.id)
+                                    }
+                                }
+                            }
+                            groupToDelete = null
+                        }
+                    ) { Text("Delete", color = MaterialTheme.colorScheme.error) }
+                },
+                dismissButton = {
+                    TextButton(onClick = { groupToDelete = null }) { Text("Cancel") }
                 }
             )
         }
@@ -435,7 +596,7 @@ private fun SectionLabel(title: String, count: Int) {
 // ────────────────────────────────────────────────────────────────────────────
 
 @Composable
-private fun EmptyState(modifier: Modifier = Modifier) {
+private fun EmptyState(groupName: String, modifier: Modifier = Modifier) {
     Box(modifier = modifier.fillMaxWidth(), contentAlignment = Alignment.Center) {
         Column(
             horizontalAlignment = Alignment.CenterHorizontally,
@@ -457,7 +618,7 @@ private fun EmptyState(modifier: Modifier = Modifier) {
             }
             Spacer(Modifier.height(20.dp))
             Text(
-                "No tasks yet",
+                "No tasks in $groupName",
                 style = MaterialTheme.typography.titleMedium,
                 color = MaterialTheme.colorScheme.onSurface,
                 fontWeight = FontWeight.SemiBold
@@ -713,10 +874,14 @@ private fun ExpandableSectionLabel(
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun AddTaskBottomSheet(
+    groups: List<TodoGroup>,
+    initialGroupId: Long,
     onDismiss: () -> Unit,
-    onAdd: (String) -> Unit
+    onAdd: (String, Long) -> Unit
 ) {
     var text by remember { mutableStateOf("") }
+    var selectedGroupId by remember { mutableLongStateOf(initialGroupId) }
+    var groupMenuExpanded by remember { mutableStateOf(false) }
     val sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)
     val scope = rememberCoroutineScope()
     val keyboard = LocalSoftwareKeyboardController.current
@@ -780,7 +945,7 @@ fun AddTaskBottomSheet(
                 keyboardActions = KeyboardActions(
                     onDone = {
                         keyboard?.hide()
-                        if (text.isNotBlank()) onAdd(text)
+                        if (text.isNotBlank()) onAdd(text, selectedGroupId)
                     }
                 ),
                 colors = OutlinedTextFieldDefaults.colors(
@@ -789,6 +954,14 @@ fun AddTaskBottomSheet(
                     focusedContainerColor = MaterialTheme.colorScheme.surfaceVariant,
                     unfocusedContainerColor = MaterialTheme.colorScheme.surfaceVariant,
                 )
+            )
+            Spacer(Modifier.height(12.dp))
+            GroupSelector(
+                groups = groups,
+                selectedGroupId = selectedGroupId,
+                onSelected = { selectedGroupId = it },
+                expanded = groupMenuExpanded,
+                onExpandedChange = { groupMenuExpanded = it }
             )
             Spacer(Modifier.height(20.dp))
             Row(
@@ -802,7 +975,7 @@ fun AddTaskBottomSheet(
                 ) { Text("Cancel") }
 
                 Button(
-                    onClick = { if (text.isNotBlank()) onAdd(text) },
+                    onClick = { if (text.isNotBlank()) onAdd(text, selectedGroupId) },
                     enabled = text.isNotBlank(),
                     modifier = Modifier.weight(1f).height(50.dp),
                     shape = RoundedCornerShape(14.dp),
@@ -823,10 +996,14 @@ fun AddTaskBottomSheet(
 @Composable
 fun EditTaskBottomSheet(
     currentText: String,
+    currentGroupId: Long,
+    groups: List<TodoGroup>,
     onDismiss: () -> Unit,
-    onSave: (String) -> Unit
+    onSave: (String, Long) -> Unit
 ) {
     var text by remember(currentText) { mutableStateOf(currentText) }
+    var selectedGroupId by remember(currentGroupId) { mutableLongStateOf(currentGroupId) }
+    var groupMenuExpanded by remember { mutableStateOf(false) }
     val sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)
     val keyboard = LocalSoftwareKeyboardController.current
 
@@ -889,7 +1066,7 @@ fun EditTaskBottomSheet(
                 keyboardActions = KeyboardActions(
                     onDone = {
                         keyboard?.hide()
-                        if (text.isNotBlank()) onSave(text)
+                        if (text.isNotBlank()) onSave(text, selectedGroupId)
                     }
                 ),
                 colors = OutlinedTextFieldDefaults.colors(
@@ -898,6 +1075,14 @@ fun EditTaskBottomSheet(
                     focusedContainerColor = MaterialTheme.colorScheme.surfaceVariant,
                     unfocusedContainerColor = MaterialTheme.colorScheme.surfaceVariant,
                 )
+            )
+            Spacer(Modifier.height(12.dp))
+            GroupSelector(
+                groups = groups,
+                selectedGroupId = selectedGroupId,
+                onSelected = { selectedGroupId = it },
+                expanded = groupMenuExpanded,
+                onExpandedChange = { groupMenuExpanded = it }
             )
             Spacer(Modifier.height(20.dp))
             Row(
@@ -911,14 +1096,70 @@ fun EditTaskBottomSheet(
                 ) { Text("Cancel") }
 
                 Button(
-                    onClick = { if (text.isNotBlank()) onSave(text) },
-                    enabled = text.isNotBlank() && text != currentText,
+                    onClick = { if (text.isNotBlank()) onSave(text, selectedGroupId) },
+                    enabled = text.isNotBlank() && (text != currentText || selectedGroupId != currentGroupId),
                     modifier = Modifier.weight(1f).height(50.dp),
                     shape = RoundedCornerShape(14.dp),
                     colors = ButtonDefaults.buttonColors(
                         containerColor = MaterialTheme.colorScheme.primary
                     )
                 ) { Text("Update", fontWeight = FontWeight.SemiBold) }
+            }
+        }
+    }
+}
+
+// ────────────────────────────────────────────────────────────────────────────
+// Group Selector
+// ────────────────────────────────────────────────────────────────────────────
+
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+private fun GroupSelector(
+    groups: List<TodoGroup>,
+    selectedGroupId: Long,
+    onSelected: (Long) -> Unit,
+    expanded: Boolean,
+    onExpandedChange: (Boolean) -> Unit
+) {
+    val selectedGroup = groups.find { it.id == selectedGroupId }
+
+    ExposedDropdownMenuBox(
+        expanded = expanded,
+        onExpandedChange = onExpandedChange
+    ) {
+        OutlinedTextField(
+            value = selectedGroup?.name ?: "Select group",
+            onValueChange = {},
+            readOnly = true,
+            label = { Text("Group") },
+            trailingIcon = {
+                ExposedDropdownMenuDefaults.TrailingIcon(expanded = expanded)
+            },
+            modifier = Modifier
+                .fillMaxWidth()
+                .menuAnchor(MenuAnchorType.PrimaryNotEditable, enabled = true),
+            shape = RoundedCornerShape(14.dp),
+            singleLine = true,
+            colors = OutlinedTextFieldDefaults.colors(
+                focusedBorderColor = MaterialTheme.colorScheme.primary,
+                unfocusedBorderColor = MaterialTheme.colorScheme.outline,
+                focusedContainerColor = MaterialTheme.colorScheme.surfaceVariant,
+                unfocusedContainerColor = MaterialTheme.colorScheme.surfaceVariant,
+            )
+        )
+        ExposedDropdownMenu(
+            expanded = expanded,
+            onDismissRequest = { onExpandedChange(false) }
+        ) {
+            groups.forEach { group ->
+                DropdownMenuItem(
+                    text = { Text(group.name) },
+                    onClick = {
+                        onSelected(group.id)
+                        onExpandedChange(false)
+                    }
+                )
             }
         }
     }
