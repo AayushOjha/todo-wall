@@ -21,6 +21,7 @@ import androidx.compose.material.icons.filled.*
 import androidx.compose.material.icons.outlined.RadioButtonUnchecked
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
+import androidx.compose.runtime.snapshotFlow
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -101,33 +102,48 @@ fun TodoScreen(
     } ?: remember { mutableStateOf(null) }
     val todos = groupTodosState ?: emptyList()
 
-    // Automatic Wallpaper Update — reflects the active group
-    LaunchedEffect(groupTodosState, isDarkMode, activeGroupId) {
-        val currentTodos = groupTodosState ?: return@LaunchedEffect
-        val groupName = activeGroup?.name ?: "My Tasks"
-        withContext(Dispatchers.IO) {
-            val currentHash = currentTodos.hashCode() * 31 +
-                              isDarkMode.hashCode() * 31 +
-                              activeGroupId.hashCode()
-            val lastHash = UserPreferences.getLastWallpaperHash(context)
+    // Automatic Wallpaper Update — reflects the active group.
+    // Uses snapshotFlow to debounce rapid tab switches and NonCancellable
+    // to ensure setBitmap always completes (prevents system-default flash).
+    LaunchedEffect(Unit) {
+        snapshotFlow {
+            Triple(groupTodosState, activeGroup, isDarkMode)
+        }.collect { (currentTodosRaw, currentGroup, darkMode) ->
+            @Suppress("UNCHECKED_CAST")
+            val currentTodos = currentTodosRaw as? List<Todo> ?: return@collect
+            val group = currentGroup as? TodoGroup ?: return@collect
+            val dark = darkMode as Boolean
 
-            if (isFirstEmission || currentHash != lastHash) {
-                try {
-                    val bitmap = renderTodosToBitmap(context, groupName, currentTodos, isDark = isDarkMode)
-                    val wallpaperManager = WallpaperManager.getInstance(context)
-                    try {
-                        wallpaperManager.suggestDesiredDimensions(bitmap.width, bitmap.height)
-                    } catch (e: SecurityException) {
-                        android.util.Log.e("Taskarma", "Wallpaper hints denied", e)
+            withContext(Dispatchers.IO) {
+                val currentHash = currentTodos.hashCode() * 31 +
+                                  dark.hashCode() * 31 +
+                                  group.id.hashCode()
+                val lastHash = UserPreferences.getLastWallpaperHash(context)
+
+                if (isFirstEmission || currentHash != lastHash) {
+                    // NonCancellable ensures setBitmap completes even if
+                    // the user switches tabs again before it finishes.
+                    withContext(kotlinx.coroutines.NonCancellable) {
+                        try {
+                            val bitmap = renderTodosToBitmap(
+                                context, group.name, currentTodos, isDark = dark
+                            )
+                            val wallpaperManager = WallpaperManager.getInstance(context)
+                            try {
+                                wallpaperManager.suggestDesiredDimensions(bitmap.width, bitmap.height)
+                            } catch (e: SecurityException) {
+                                android.util.Log.e("Taskarma", "Wallpaper hints denied", e)
+                            }
+                            wallpaperManager.setBitmap(
+                                bitmap, null, true,
+                                WallpaperManager.FLAG_SYSTEM or WallpaperManager.FLAG_LOCK
+                            )
+                            UserPreferences.setLastWallpaperHash(context, currentHash)
+                            isFirstEmission = false
+                        } catch (e: Exception) {
+                            android.util.Log.e("Taskarma", "Failed to set wallpaper", e)
+                        }
                     }
-                    wallpaperManager.setBitmap(
-                        bitmap, null, true,
-                        WallpaperManager.FLAG_SYSTEM or WallpaperManager.FLAG_LOCK
-                    )
-                    UserPreferences.setLastWallpaperHash(context, currentHash)
-                    isFirstEmission = false
-                } catch (e: Exception) {
-                    android.util.Log.e("Taskarma", "Failed to set wallpaper", e)
                 }
             }
         }
