@@ -3,9 +3,12 @@ package com.mohannic.taskarma
 import android.app.WallpaperManager
 import androidx.compose.animation.*
 import androidx.compose.animation.core.*
+import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.*
+import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.lazy.rememberLazyListState
@@ -155,73 +158,143 @@ fun TodoScreen(
                 .padding(innerPadding)
                 .fillMaxSize()
         ) {
-            // Group tabs
+            // ── Google Tasks-style chip tabs ──────────────────────────────
             if (groups.isNotEmpty()) {
-                ScrollableTabRow(
-                    selectedTabIndex = groups.indexOfFirst { it.id == activeGroupId }.coerceAtLeast(0),
-                    containerColor = MaterialTheme.colorScheme.background,
-                    contentColor = MaterialTheme.colorScheme.primary,
-                    edgePadding = 16.dp,
-                    indicator = {},
-                    divider = {}
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .horizontalScroll(rememberScrollState())
+                        .padding(horizontal = 16.dp, vertical = 10.dp),
+                    horizontalArrangement = Arrangement.spacedBy(8.dp),
+                    verticalAlignment = Alignment.CenterVertically
                 ) {
                     groups.forEach { group ->
-                        Tab(
-                            selected = group.id == activeGroupId,
+                        GroupTabChip(
+                            name = group.name,
+                            isSelected = group.id == activeGroupId,
                             onClick = {
                                 activeGroupId = group.id
                                 UserPreferences.setLastViewedGroupId(context, group.id)
-                            },
-                            text = {
-                                Row(
-                                    verticalAlignment = Alignment.CenterVertically,
-                                    horizontalArrangement = Arrangement.spacedBy(4.dp)
-                                ) {
-                                    Text(group.name)
-                                    Box {
-                                        var expanded by remember { mutableStateOf(false) }
-                                        IconButton(
-                                            onClick = { expanded = true },
-                                            modifier = Modifier.size(20.dp)
-                                        ) {
-                                            Icon(
-                                                imageVector = Icons.Default.MoreVert,
-                                                contentDescription = "Group options",
-                                                modifier = Modifier.size(16.dp)
-                                            )
-                                        }
-                                        DropdownMenu(
-                                            expanded = expanded,
-                                            onDismissRequest = { expanded = false }
-                                        ) {
-                                            DropdownMenuItem(
-                                                text = { Text("Rename") },
-                                                onClick = {
-                                                    groupToRename = group
-                                                    expanded = false
-                                                }
-                                            )
-                                            if (group.id != defaultGroup?.id) {
-                                                DropdownMenuItem(
-                                                    text = { Text("Delete") },
-                                                    onClick = {
-                                                        groupToDelete = group
-                                                        expanded = false
-                                                    }
-                                                )
-                                            }
-                                        }
-                                    }
-                                }
                             }
                         )
                     }
-                    Tab(
-                        selected = false,
+                    // "+ New list" chip — perfectly aligned with other chips
+                    Surface(
                         onClick = { showCreateGroupSheet = true },
-                        icon = { Icon(Icons.Default.Add, contentDescription = "Create group") },
-                        text = { Text("") }
+                        shape = RoundedCornerShape(20.dp),
+                        color = Color.Transparent,
+                        border = BorderStroke(
+                            1.dp,
+                            MaterialTheme.colorScheme.outline.copy(alpha = 0.5f)
+                        )
+                    ) {
+                        Row(
+                            modifier = Modifier.padding(horizontal = 14.dp, vertical = 8.dp),
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.spacedBy(4.dp)
+                        ) {
+                            Icon(
+                                Icons.Default.Add,
+                                contentDescription = "New list",
+                                modifier = Modifier.size(18.dp),
+                                tint = MaterialTheme.colorScheme.primary
+                            )
+                            Text(
+                                "New list",
+                                style = MaterialTheme.typography.labelLarge,
+                                color = MaterialTheme.colorScheme.primary
+                            )
+                        }
+                    }
+                }
+
+                // Clean separator below tabs
+                Box(
+                    Modifier
+                        .fillMaxWidth()
+                        .height(0.8.dp)
+                        .background(MaterialTheme.colorScheme.outline.copy(alpha = 0.18f))
+                )
+
+                // ── Content header — group name + options (like Google Tasks) ──
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(start = 20.dp, end = 4.dp, top = 14.dp, bottom = 2.dp),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Text(
+                        text = activeGroup?.name ?: "My Tasks",
+                        style = MaterialTheme.typography.headlineSmall,
+                        fontWeight = FontWeight.Bold,
+                        color = MaterialTheme.colorScheme.onBackground,
+                        modifier = Modifier.weight(1f),
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis
                     )
+                    // Sort
+                    IconButton(
+                        onClick = { /* TODO: sort */ },
+                        modifier = Modifier.size(40.dp)
+                    ) {
+                        Icon(
+                            imageVector = Icons.Default.SwapVert,
+                            contentDescription = "Sort tasks",
+                            tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                            modifier = Modifier.size(22.dp)
+                        )
+                    }
+                    // 3-dot menu for the active group
+                    Box {
+                        var showGroupMenu by remember { mutableStateOf(false) }
+                        IconButton(
+                            onClick = { showGroupMenu = true },
+                            modifier = Modifier.size(40.dp)
+                        ) {
+                            Icon(
+                                imageVector = Icons.Default.MoreVert,
+                                contentDescription = "List options",
+                                tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                                modifier = Modifier.size(22.dp)
+                            )
+                        }
+                        DropdownMenu(
+                            expanded = showGroupMenu,
+                            onDismissRequest = { showGroupMenu = false }
+                        ) {
+                            DropdownMenuItem(
+                                text = { Text("Rename list") },
+                                leadingIcon = {
+                                    Icon(Icons.Default.Edit, null, Modifier.size(20.dp))
+                                },
+                                onClick = {
+                                    activeGroup?.let { groupToRename = it }
+                                    showGroupMenu = false
+                                }
+                            )
+                            if (activeGroup?.id != defaultGroup?.id) {
+                                DropdownMenuItem(
+                                    text = {
+                                        Text(
+                                            "Delete list",
+                                            color = MaterialTheme.colorScheme.error
+                                        )
+                                    },
+                                    leadingIcon = {
+                                        Icon(
+                                            Icons.Default.DeleteOutline, null,
+                                            Modifier.size(20.dp),
+                                            tint = MaterialTheme.colorScheme.error
+                                        )
+                                    },
+                                    onClick = {
+                                        activeGroup?.let { groupToDelete = it }
+                                        showGroupMenu = false
+                                    }
+                                )
+                            }
+                        }
+                    }
                 }
             }
 
@@ -594,6 +667,40 @@ private fun SectionLabel(title: String, count: Int) {
 // ────────────────────────────────────────────────────────────────────────────
 // Empty State
 // ────────────────────────────────────────────────────────────────────────────
+
+// ────────────────────────────────────────────────────────────────────────────
+// Group Tab Chip — Google Tasks-style pill tab
+// ────────────────────────────────────────────────────────────────────────────
+
+@Composable
+private fun GroupTabChip(
+    name: String,
+    isSelected: Boolean,
+    onClick: () -> Unit
+) {
+    Surface(
+        onClick = onClick,
+        shape = RoundedCornerShape(20.dp),
+        color = if (isSelected) MaterialTheme.colorScheme.primaryContainer
+                else Color.Transparent,
+        border = if (!isSelected) BorderStroke(
+            1.dp,
+            MaterialTheme.colorScheme.outline.copy(alpha = 0.4f)
+        ) else null,
+        tonalElevation = 0.dp
+    ) {
+        Text(
+            text = name,
+            modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp),
+            style = MaterialTheme.typography.labelLarge,
+            color = if (isSelected) MaterialTheme.colorScheme.primary
+                    else MaterialTheme.colorScheme.onSurfaceVariant,
+            fontWeight = if (isSelected) FontWeight.SemiBold else FontWeight.Normal,
+            maxLines = 1,
+            overflow = TextOverflow.Ellipsis
+        )
+    }
+}
 
 @Composable
 private fun EmptyState(groupName: String, modifier: Modifier = Modifier) {
