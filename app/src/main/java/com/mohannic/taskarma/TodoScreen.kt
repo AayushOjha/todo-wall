@@ -69,7 +69,7 @@ fun TodoScreen(
     val groupDao = remember(context) { TodoDatabase.getInstance(context).todoGroupDao() }
     val groups by groupDao.observeAll().collectAsState(initial = emptyList())
     val lastViewedGroupId = remember { UserPreferences.getLastViewedGroupId(context) }
-    var activeGroupId by remember { mutableLongStateOf(-1L) }
+    var activeGroupId by remember { mutableLongStateOf(lastViewedGroupId) }
     var showCreateGroupSheet by remember { mutableStateOf(false) }
     var groupToRename by remember { mutableStateOf<TodoGroup?>(null) }
     var groupToDelete by remember { mutableStateOf<TodoGroup?>(null) }
@@ -83,8 +83,9 @@ fun TodoScreen(
         groups.find { it.id == activeGroupId } ?: defaultGroup
     }
 
-    // Ensure at least one default group always exists
-    LaunchedEffect(groups, lastViewedGroupId) {
+    // Ensure at least one default group always exists, and that the active
+    // group is still valid (it may have been deleted since the last session).
+    LaunchedEffect(groups) {
         if (groups.isEmpty()) {
             // Create default group — this will trigger recomposition via the Flow
             val defaultId = groupDao.ensureDefaultGroup()
@@ -92,8 +93,10 @@ fun TodoScreen(
             UserPreferences.setLastViewedGroupId(context, defaultId)
             return@LaunchedEffect
         }
-        if (activeGroupId == -1L) {
-            activeGroupId = groups.find { it.id == lastViewedGroupId }?.id ?: groups.first().id
+        // If the persisted group no longer exists (e.g. was deleted), fall back gracefully
+        if (groups.none { it.id == activeGroupId }) {
+            activeGroupId = groups.first().id
+            UserPreferences.setLastViewedGroupId(context, activeGroupId)
         }
     }
 
